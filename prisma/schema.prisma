@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GlobalRole {
+  ADMIN
+  PLAYER
+}
+
+enum TeamRole {
+  CAPTAIN
+  PLAYER
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum MatchType {
+  SCRIM
+  TOURNAMENT
+  RANKED
+  OTHER
+}
+
+enum MatchResult {
+  SCHEDULED
+  WIN
+  LOSS
+  DRAW
+  CANCELLED
+}
+
+enum PlayerRole {
+  TANK
+  DPS_HITSCAN
+  DPS_FLEX
+  SUPPORT_MAIN
+  SUPPORT_OFF
+}
+
+enum LineupStatus {
+  PENDING
+  PRESENT
+  ABSENT
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  displayName  String
+  battleTag    String?
+  smurfTags    String[]     @default([])
+  playerRoles  PlayerRole[] @default([])
+  discord      String?
+  avatarUrl    String?
+  role         GlobalRole   @default(PLAYER)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  membership       TeamMember?
+  availabilities   Availability[]
+  joinRequests     JoinRequest[]  @relation("Applicant")
+  reviewedRequests JoinRequest[]  @relation("Reviewer")
+  createdMatches   Match[]        @relation("MatchCreator")
+  links            UserLink[]
+  createdTeamLinks TeamLink[]     @relation("TeamLinkCreator")
+  lineupEntries    MatchLineup[]
+}
+
+model UserLink {
+  id     String @id @default(cuid())
+  userId String
+  label  String
+  url    String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  tag         String   @unique
+  description String?
+  color       String   @default("#FA9C1E")
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members      TeamMember[]
+  joinRequests JoinRequest[]
+  matches      Match[]
+  links        TeamLink[]
+}
+
+model TeamLink {
+  id          String   @id @default(cuid())
+  teamId      String
+  title       String
+  url         String
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  team      Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("TeamLinkCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  userId   String   @unique
+  teamId   String
+  role     TeamRole @default(PLAYER)
+  joinedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+}
+
+model JoinRequest {
+  id           String            @id @default(cuid())
+  userId       String
+  teamId       String
+  message      String?
+  status       JoinRequestStatus @default(PENDING)
+  createdAt    DateTime          @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  user       User  @relation("Applicant", fields: [userId], references: [id], onDelete: Cascade)
+  team       Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("Reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, teamId])
+  @@index([teamId, status])
+}
+
+model Availability {
+  id        String @id @default(cuid())
+  userId    String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayOfWeek, startTime, endTime])
+  @@index([userId])
+}
+
+model Match {
+  id              String      @id @default(cuid())
+  teamId          String
+  opponent        String
+  opponentLogoUrl String?
+  title           String?
+  type            MatchType   @default(SCRIM)
+  result          MatchResult @default(SCHEDULED)
+  score           String?
+  scheduledAt     DateTime
+  notes           String?
+  createdById     String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  team      Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("MatchCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  lineup    MatchLineup[]
+
+  @@index([teamId, scheduledAt])
+  @@index([scheduledAt])
+  @@index([result])
+}
+
+model MatchLineup {
+  id        String       @id @default(cuid())
+  matchId   String
+  userId    String
+  status    LineupStatus @default(PENDING)
+  addedAt   DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([matchId])
+  @@index([userId])
+}
