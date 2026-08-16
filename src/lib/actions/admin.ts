@@ -7,6 +7,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { isUploadBlob, saveUploadedImage } from "@/lib/uploads";
+import { passwordSchema } from "@/lib/security/safe";
 
 export type AdminActionState = {
   error?: string;
@@ -293,7 +294,12 @@ export async function adminUpdateUser(
   };
 
   if (password) {
-    if (password.length < 8) return { error: "Mot de passe min. 8 caractères." };
+    const pw = passwordSchema.safeParse(password);
+    if (!pw.success) {
+      return {
+        error: "Mot de passe trop faible (min. 10, lettre + chiffre).",
+      };
+    }
     data.passwordHash = await bcrypt.hash(password, 12);
   }
 

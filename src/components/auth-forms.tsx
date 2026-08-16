@@ -100,11 +100,11 @@ export function RegisterForm() {
           id="password"
           name="password"
           type="password"
-          minLength={8}
+          minLength={10}
           autoComplete="new-password"
           required
         />
-        <p className="field-hint">Au moins 8 caractères.</p>
+        <p className="field-hint">Min. 10 caractères, avec lettre et chiffre.</p>
       </div>
       <Feedback state={state} />
       <button className="btn btn-primary w-full" disabled={pending} type="submit">

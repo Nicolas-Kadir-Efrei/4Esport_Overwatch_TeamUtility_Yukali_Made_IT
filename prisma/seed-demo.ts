@@ -12,6 +12,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import "dotenv/config";
 
+if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+  throw new Error(
+    "db:demo interdit en production (mots de passe démo hardcodés).",
+  );
+}
+
 const DEMO_PASSWORD = "DemoOW2026!";
 
 type Slot = { dayOfWeek: number; startTime: string; endTime: string };

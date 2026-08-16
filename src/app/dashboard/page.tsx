@@ -12,6 +12,11 @@ export default async function DashboardPage() {
     where: {
       scheduledAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
       result: { in: ["SCHEDULED"] },
+      ...(user.role === "ADMIN"
+        ? {}
+        : user.teamId
+          ? { teamId: user.teamId }
+          : { teamId: "__none__" }),
     },
     include: { team: true },
     orderBy: { scheduledAt: "asc" },

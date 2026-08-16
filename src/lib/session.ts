@@ -26,13 +26,22 @@ export function isCaptainOrAdmin(
 export async function requireTeamManager(teamId: string) {
   const user = await requireUser();
   if (user.role === "ADMIN") {
-    return { user, membership: null as Awaited<ReturnType<typeof prisma.teamMember.findUnique>> };
+    return {
+      user,
+      membership: null as Awaited<
+        ReturnType<typeof prisma.teamMember.findUnique>
+      >,
+    };
   }
 
   const membership = await prisma.teamMember.findUnique({
     where: { userId: user.id },
   });
-  if (!membership || membership.teamId !== teamId || membership.role !== "CAPTAIN") {
+  if (
+    !membership ||
+    membership.teamId !== teamId ||
+    membership.role !== "CAPTAIN"
+  ) {
     redirect("/dashboard");
   }
   return { user, membership };
@@ -50,4 +59,16 @@ export async function canManageTeam(teamId: string) {
     membership.teamId === teamId &&
     membership.role === "CAPTAIN"
   );
+}
+
+/** Contacts perso (Discord, réseaux) : admin ou membre de l'équipe. */
+export async function canViewTeamContacts(teamId: string) {
+  const session = await auth();
+  if (!session?.user?.id) return false;
+  if (session.user.role === "ADMIN") return true;
+  const membership = await prisma.teamMember.findUnique({
+    where: { userId: session.user.id },
+    select: { teamId: true },
+  });
+  return membership?.teamId === teamId;
 }

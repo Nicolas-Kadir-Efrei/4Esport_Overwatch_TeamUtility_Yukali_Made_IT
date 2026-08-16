@@ -1,5 +1,9 @@
 import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
+import {
+  sanitizeFileBasename,
+  sanitizeUploadSubdir,
+} from "@/lib/security/safe";
 
 const ALLOWED_MIME: Record<string, string> = {
   "image/png": "png",
@@ -9,7 +13,7 @@ const ALLOWED_MIME: Record<string, string> = {
   "image/gif": "gif",
 };
 
-export const MAX_LOGO_BYTES = 5 * 1024 * 1024;
+export const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 Mo (avatars/logos)
 
 export function isUploadBlob(
   value: FormDataEntryValue | null,
@@ -69,31 +73,57 @@ export async function saveUploadedImage(
   subdir: string,
   basename: string,
 ): Promise<{ url: string } | { error: string }> {
+  const safeSub = sanitizeUploadSubdir(subdir);
+  const safeBase = sanitizeFileBasename(basename);
+  if (!safeSub || !safeBase) {
+    return { error: "Identifiant fichier invalide." };
+  }
+
   if (file.size > MAX_LOGO_BYTES) {
-    return { error: "Fichier trop lourd (max 5 Mo)." };
+    return { error: "Fichier trop lourd (max 2 Mo)." };
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const sniffed = sniffExt(buffer);
-  const mimeExt = file.type ? ALLOWED_MIME[file.type] : undefined;
-  const ext = sniffed ?? mimeExt;
-
-  if (!ext) {
+  if (!sniffed) {
     return { error: "Format non supporté. Utilise PNG, JPG, WebP ou GIF." };
   }
 
-  const dir = path.join(process.cwd(), "public", "uploads", subdir);
-  await mkdir(dir, { recursive: true });
+  // Le Content-Type client ne fait jamais foi seul
+  const mimeExt = file.type ? ALLOWED_MIME[file.type] : undefined;
+  if (mimeExt && mimeExt !== sniffed && !(mimeExt === "jpg" && sniffed === "jpg")) {
+    // jpeg/jpg ok ; sinon refus si mismatch déclaré
+    if (!(file.type === "image/jpeg" && sniffed === "jpg")) {
+      return { error: "Type de fichier incohérent." };
+    }
+  }
+
+  const ext = sniffed;
+  const dir = path.join(process.cwd(), "public", "uploads", safeSub);
+
+  // Garde-fou path traversal
+  const resolvedDir = path.resolve(dir);
+  const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
+  if (!resolvedDir.startsWith(uploadsRoot + path.sep) && resolvedDir !== uploadsRoot) {
+    return { error: "Chemin upload invalide." };
+  }
+
+  await mkdir(resolvedDir, { recursive: true });
 
   for (const oldExt of ["png", "jpg", "jpeg", "webp", "gif"]) {
     try {
-      await unlink(path.join(dir, `${basename}.${oldExt}`));
+      await unlink(path.join(resolvedDir, `${safeBase}.${oldExt}`));
     } catch {
       /* ignore */
     }
   }
 
-  const filename = `${basename}.${ext}`;
-  await writeFile(path.join(dir, filename), buffer);
-  return { url: `/uploads/${subdir}/${filename}?v=${Date.now()}` };
+  const filename = `${safeBase}.${ext}`;
+  const fullPath = path.join(resolvedDir, filename);
+  if (!path.resolve(fullPath).startsWith(resolvedDir + path.sep)) {
+    return { error: "Chemin upload invalide." };
+  }
+
+  await writeFile(fullPath, buffer);
+  return { url: `/uploads/${safeSub}/${filename}?v=${Date.now()}` };
 }

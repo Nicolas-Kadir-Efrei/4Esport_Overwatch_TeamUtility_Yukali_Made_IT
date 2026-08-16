@@ -7,6 +7,7 @@ import {
 } from "@/components/social-icons";
 import { getSocialPlatform } from "@/lib/social-platforms";
 import { formatPlayerRole } from "@/lib/constants";
+import { isSafeHttpUrl, safeDiscordHref } from "@/lib/security/safe";
 
 type RosterMember = {
   id: string;
@@ -22,11 +23,6 @@ type RosterMember = {
   };
 };
 
-function discordHref(value: string) {
-  if (/^https?:\/\//i.test(value)) return value;
-  return `https://discord.com/users/${encodeURIComponent(value)}`;
-}
-
 export function TeamRoster({
   teamId,
   members,
@@ -35,6 +31,7 @@ export function TeamRoster({
   currentUserId,
   isAdmin,
   showProfileHint,
+  showContacts = true,
 }: {
   teamId: string;
   members: RosterMember[];
@@ -43,6 +40,7 @@ export function TeamRoster({
   currentUserId: string;
   isAdmin: boolean;
   showProfileHint: boolean;
+  showContacts?: boolean;
 }) {
   return (
     <section className="mb-10">
@@ -112,20 +110,38 @@ export function TeamRoster({
                     </div>
                   )}
 
+                  {showContacts && (
                   <div className="roster-contacts">
-                    {m.user.discord ? (
-                      <a
-                        href={discordHref(m.user.discord)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="roster-social roster-social-discord"
-                        title={`Discord · ${m.user.discord}`}
-                        aria-label={`Discord ${m.user.discord}`}
-                      >
-                        <DiscordIcon className="h-4 w-4" />
-                      </a>
-                    ) : null}
-                    {m.user.links.map((l) => {
+                    {m.user.discord
+                      ? (() => {
+                          const href = safeDiscordHref(m.user.discord);
+                          if (href) {
+                            return (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="roster-social roster-social-discord"
+                                title={`Discord · ${m.user.discord}`}
+                                aria-label={`Discord ${m.user.discord}`}
+                              >
+                                <DiscordIcon className="h-4 w-4" />
+                              </a>
+                            );
+                          }
+                          return (
+                            <span
+                              className="roster-social roster-social-discord opacity-80"
+                              title={`Discord · ${m.user.discord}`}
+                            >
+                              <DiscordIcon className="h-4 w-4" />
+                            </span>
+                          );
+                        })()
+                      : null}
+                    {m.user.links
+                      .filter((l) => isSafeHttpUrl(l.url))
+                      .map((l) => {
                       const meta = getSocialPlatform(l.label);
                       return (
                         <a
@@ -150,6 +166,12 @@ export function TeamRoster({
                       </span>
                     )}
                   </div>
+                  )}
+                  {!showContacts && (
+                    <p className="text-xs text-[var(--muted)]">
+                      Contacts visibles pour les membres de l&apos;équipe.
+                    </p>
+                  )}
                 </div>
               </li>
             );

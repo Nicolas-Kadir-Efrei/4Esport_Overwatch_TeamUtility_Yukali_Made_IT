@@ -12,15 +12,25 @@ export default async function MatchHistoryPage({
 }: {
   searchParams: Promise<{ team?: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const { team: teamFilter } = await searchParams;
   const now = new Date();
 
-  const teams = await prisma.team.findMany({ orderBy: { name: "asc" } });
+  const teams =
+    user.role === "ADMIN"
+      ? await prisma.team.findMany({ orderBy: { name: "asc" } })
+      : user.teamId
+        ? await prisma.team.findMany({ where: { id: user.teamId } })
+        : [];
+
+  const scopedTeamId =
+    user.role === "ADMIN"
+      ? teamFilter
+      : user.teamId ?? "__none__";
 
   const matches = await prisma.match.findMany({
     where: {
-      ...(teamFilter ? { teamId: teamFilter } : {}),
+      ...(scopedTeamId ? { teamId: scopedTeamId } : {}),
       OR: [
         { scheduledAt: { lt: now } },
         { result: { in: ["WIN", "LOSS", "DRAW", "CANCELLED"] } },

@@ -31,13 +31,13 @@ declare module "next-auth" {
 
 declare module "@auth/core/jwt" {
   interface JWT {
-    id: string;
-    role: GlobalRole;
+    id?: string;
+    role?: GlobalRole;
     teamId?: string | null;
     teamRole?: TeamRole | null;
     teamTag?: string | null;
     avatarUrl?: string | null;
-    displayName: string;
+    displayName?: string;
   }
 }
 
@@ -46,8 +46,14 @@ const credentialsSchema = z.object({
   password: z.string().min(1),
 });
 
+const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 jours
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: SESSION_MAX_AGE,
+    updateAge: 60 * 60, // refresh claims toutes les heures
+  },
   pages: {
     signIn: "/login",
   },
@@ -67,10 +73,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             membership: { include: { team: true } },
           },
         });
-        if (!user) return null;
 
-        const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
-        if (!ok) return null;
+        // Compare toujours un hash pour limiter l’oracle de timing
+        const hash =
+          user?.passwordHash ??
+          "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidiu";
+        const ok = await bcrypt.compare(parsed.data.password, hash);
+        if (!user || !ok) return null;
 
         return {
           id: user.id,
@@ -96,42 +105,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.teamId = user.teamId;
         token.teamRole = user.teamRole;
         token.teamTag = user.teamTag;
+        return token;
       }
+
+      if (!token.id) {
+        return {};
+      }
+
+      const fresh = await prisma.user.findUnique({
+        where: { id: token.id },
+        include: { membership: { include: { team: true } } },
+      });
+
+      // Compte supprimé / désactivé → invalide le JWT
+      if (!fresh) {
+        return {};
+      }
+
+      token.role = fresh.role;
+      token.displayName = fresh.displayName;
+      token.avatarUrl = fresh.avatarUrl;
+      token.email = fresh.email;
+      token.teamId = fresh.membership?.teamId ?? null;
+      token.teamRole = fresh.membership?.role ?? null;
+      token.teamTag = fresh.membership?.team.tag ?? null;
       return token;
     },
     async session({ session, token }) {
-      let role = token.role;
-      let displayName = token.displayName;
-      let avatarUrl = token.avatarUrl;
-      let teamId = token.teamId;
-      let teamRole = token.teamRole;
-      let teamTag = token.teamTag;
-
-      if (token.id) {
-        const fresh = await prisma.user.findUnique({
-          where: { id: token.id },
-          include: { membership: { include: { team: true } } },
-        });
-        if (fresh) {
-          role = fresh.role;
-          displayName = fresh.displayName;
-          avatarUrl = fresh.avatarUrl;
-          teamId = fresh.membership?.teamId ?? null;
-          teamRole = fresh.membership?.role ?? null;
-          teamTag = fresh.membership?.team.tag ?? null;
-        }
+      if (!token.id || !token.role || !token.displayName) {
+        return { ...session, user: undefined as unknown as typeof session.user };
       }
 
       session.user = {
         ...session.user,
         id: token.id,
         email: (token.email as string) ?? "",
-        role,
-        displayName,
-        avatarUrl,
-        teamId,
-        teamRole,
-        teamTag,
+        role: token.role,
+        displayName: token.displayName,
+        avatarUrl: token.avatarUrl,
+        teamId: token.teamId,
+        teamRole: token.teamRole,
+        teamTag: token.teamTag,
       };
       return session;
     },

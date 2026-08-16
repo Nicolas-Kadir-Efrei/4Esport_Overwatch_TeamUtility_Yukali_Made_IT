@@ -135,6 +135,8 @@ export async function uploadOpponentLogo(
   return { success: "Logo adversaire mis à jour." };
 }
 
+import { sanitizeHttpUrl } from "@/lib/security/safe";
+
 const linkSchema = z.object({
   title: z.string().min(2).max(60).trim(),
   url: z.string().url().max(500),
@@ -150,8 +152,10 @@ export async function createTeamLink(
   if (!teamId) return { error: "Équipe manquante." };
 
   const { user } = await requireTeamManager(teamId);
-  const rawUrl = String(formData.get("url") ?? "").trim();
-  const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+  const url = sanitizeHttpUrl(String(formData.get("url") ?? ""));
+  if (!url) {
+    return { error: "URL invalide (https://… uniquement)." };
+  }
 
   const parsed = linkSchema.safeParse({
     title: formData.get("title"),

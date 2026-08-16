@@ -352,7 +352,7 @@ export function AvatarForm({
               Dépose ton image ici
             </p>
             <p className="text-sm text-[var(--muted)]">
-              PNG, JPG, WebP ou GIF · max 5 Mo
+              PNG, JPG, WebP ou GIF · max 2 Mo
             </p>
             {fileName ? (
               <p className="chip avail-maybe">{fileName}</p>

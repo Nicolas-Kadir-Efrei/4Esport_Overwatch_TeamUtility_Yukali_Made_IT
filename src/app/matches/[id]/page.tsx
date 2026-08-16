@@ -14,7 +14,7 @@ import { TeamLogo } from "@/components/team-logo";
 import { adminDeleteMatch } from "@/lib/actions/admin";
 import { formatMatchResult, formatMatchType } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
-import { canManageTeam, requireUser } from "@/lib/session";
+import { canManageTeam, canViewTeamContacts, requireUser } from "@/lib/session";
 
 function statusLabel(status: string) {
   switch (status) {
@@ -75,6 +75,7 @@ export default async function MatchDetailPage({
       : [];
 
   const isManager = await canManageTeam(match.teamId);
+  const showContacts = await canViewTeamContacts(match.teamId);
   const lineupByUser = new Map(match.lineup.map((l) => [l.userId, l]));
 
   const boardMembers = members.map((m) => ({
@@ -82,11 +83,11 @@ export default async function MatchDetailPage({
     displayName: m.user.displayName,
     avatarUrl: m.user.avatarUrl,
     battleTag: m.user.battleTag,
-    smurfTags: m.user.smurfTags,
+    smurfTags: showContacts ? m.user.smurfTags : [],
     playerRoles: m.user.playerRoles,
     role: m.role,
     teamRole: m.role,
-    availabilities: m.user.availabilities,
+    availabilities: showContacts ? m.user.availabilities : [],
   }));
 
   const lineupMembers = members.map((m) => {
@@ -96,7 +97,7 @@ export default async function MatchDetailPage({
       displayName: m.user.displayName,
       avatarUrl: m.user.avatarUrl,
       battleTag: m.user.battleTag,
-      discord: m.user.discord,
+      discord: showContacts ? m.user.discord : null,
       teamRole: m.role,
       playerRoles: m.user.playerRoles,
       playing: !!entry,
@@ -197,6 +198,7 @@ export default async function MatchDetailPage({
         </section>
       )}
 
+      {showContacts && (
       <section className="panel mt-8 p-5">
         <h2 className="font-display mb-2 text-3xl">Lineup</h2>
         <p className="mb-4 text-sm text-[var(--muted)]">
@@ -209,7 +211,9 @@ export default async function MatchDetailPage({
           currentUserId={user.id}
         />
       </section>
+      )}
 
+      {showContacts && (
       <section className="mt-8">
         <h2 className="font-display mb-2 text-3xl">Disponibilités au créneau</h2>
         <MatchPlayerAvailabilityList
@@ -217,8 +221,9 @@ export default async function MatchDetailPage({
           scheduledAt={match.scheduledAt}
         />
       </section>
+      )}
 
-      {match.result === "SCHEDULED" && (
+      {showContacts && match.result === "SCHEDULED" && (
         <section className="mt-8">
           <h2 className="font-display mb-4 text-3xl">Vue match</h2>
           <MatchAvailabilityBoard
@@ -227,6 +232,12 @@ export default async function MatchDetailPage({
             linkToMatch={false}
           />
         </section>
+      )}
+
+      {!showContacts && (
+        <p className="mt-8 text-sm text-[var(--muted)]">
+          Lineup et dispos réservés aux membres de l&apos;équipe.
+        </p>
       )}
 
       {user.role === "ADMIN" && (

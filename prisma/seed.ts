@@ -50,8 +50,18 @@ async function main() {
   }
 
   const email = process.env.ADMIN_EMAIL ?? "admin@owroster.local";
-  const password = process.env.ADMIN_PASSWORD ?? "AdminOW2026!";
-  const passwordHash = await bcrypt.hash(password, 12);
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) {
+    if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+      throw new Error(
+        "ADMIN_PASSWORD est obligatoire en production. Ne jamais utiliser le défaut.",
+      );
+    }
+    console.warn(
+      "[seed] ADMIN_PASSWORD manquant — utilisation d’un mot de passe DEV uniquement.",
+    );
+  }
+  const passwordHash = await bcrypt.hash(password ?? "AdminOW2026!", 12);
 
   await prisma.user.upsert({
     where: { email },

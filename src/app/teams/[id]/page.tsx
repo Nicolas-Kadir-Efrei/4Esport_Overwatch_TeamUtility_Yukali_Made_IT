@@ -17,7 +17,7 @@ import {
   overlapsSlot,
 } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
-import { canManageTeam, requireUser } from "@/lib/session";
+import { canManageTeam, canViewTeamContacts, requireUser } from "@/lib/session";
 import { PageHeader } from "@/components/ui";
 
 export default async function TeamDetailPage({
@@ -48,7 +48,8 @@ export default async function TeamDetailPage({
   if (!team) notFound();
 
   const now = new Date();
-  const [upcoming, history, membership, myRequest, isManager] = await Promise.all([
+  const [upcoming, history, membership, myRequest, isManager, showContacts] =
+    await Promise.all([
     prisma.match.findMany({
       where: {
         teamId: team.id,
@@ -74,6 +75,7 @@ export default async function TeamDetailPage({
       where: { userId_teamId: { userId: user.id, teamId: team.id } },
     }),
     canManageTeam(team.id),
+    canViewTeamContacts(team.id),
   ]);
 
   const historyIds = new Set(upcoming.map((m) => m.id));
@@ -190,8 +192,10 @@ export default async function TeamDetailPage({
         currentUserId={user.id}
         isAdmin={user.role === "ADMIN"}
         showProfileHint={isOnThisTeam}
+        showContacts={showContacts}
       />
 
+      {showContacts && (
       <section className="mb-10">
         <h2 className="font-display mb-2 text-3xl">Disponibilités</h2>
         <p className="mb-4 text-sm text-[var(--muted)]">
@@ -199,6 +203,7 @@ export default async function TeamDetailPage({
         </p>
         <TeamAvailabilityOverview members={availabilityMembers} />
       </section>
+      )}
 
       {canApply && (
         <section className="panel mb-10 p-5">
@@ -226,14 +231,16 @@ export default async function TeamDetailPage({
           <div className="space-y-4">
             {upcoming.map((m) => {
               const d = new Date(m.scheduledAt);
-              const dispoCount = availabilityMembers.filter((mem) =>
-                overlapsSlot(
-                  d.getDay(),
-                  d.getHours(),
-                  d.getMinutes(),
-                  mem.availabilities,
-                ),
-              ).length;
+              const dispoCount = showContacts
+                ? availabilityMembers.filter((mem) =>
+                    overlapsSlot(
+                      d.getDay(),
+                      d.getHours(),
+                      d.getMinutes(),
+                      mem.availabilities,
+                    ),
+                  ).length
+                : null;
               return (
                 <div key={m.id} className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
@@ -250,17 +257,21 @@ export default async function TeamDetailPage({
                       vs {m.opponent}
                     </Link>
                     <span className="text-sm text-[var(--cyan)]">
-                      {dispoCount}/{availabilityMembers.length} dispo ·{" "}
+                      {dispoCount !== null
+                        ? `${dispoCount}/${availabilityMembers.length} dispo · `
+                        : ""}
                       {format(m.scheduledAt, "EEE d MMM · HH:mm", { locale: fr })}
                     </span>
                   </div>
-                  <MatchAvailabilityBoard
-                    matches={[{ ...m, team }]}
-                    members={availabilityMembers.map((mem) => ({
-                      ...mem,
-                      role: mem.teamRole ?? "PLAYER",
-                    }))}
-                  />
+                  {showContacts && (
+                    <MatchAvailabilityBoard
+                      matches={[{ ...m, team }]}
+                      members={availabilityMembers.map((mem) => ({
+                        ...mem,
+                        role: mem.teamRole ?? "PLAYER",
+                      }))}
+                    />
+                  )}
                 </div>
               );
             })}

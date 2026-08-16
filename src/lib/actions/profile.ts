@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { writeFile, mkdir, unlink } from "fs/promises";
-import path from "path";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -14,18 +13,14 @@ import {
   isSocialPlatformId,
   normalizeSocialPlatformId,
 } from "@/lib/social-platforms";
+import { isUploadBlob, saveUploadedImage } from "@/lib/uploads";
+import { sanitizeHttpUrl } from "@/lib/security/safe";
+import {
+  clientIpFromHeaders,
+  rateLimit,
+} from "@/lib/security/rate-limit";
 
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-
-const ALLOWED_MIME: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-};
-
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const ROLE_VALUES = new Set(PLAYER_ROLES.map((r) => r.value));
 
 const profileSchema = z.object({
@@ -45,56 +40,6 @@ export type ProfileActionState = {
   success?: string;
 };
 
-function isUploadBlob(value: FormDataEntryValue | null): value is File {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "arrayBuffer" in value &&
-    "size" in value &&
-    typeof (value as Blob).arrayBuffer === "function" &&
-    (value as Blob).size > 0
-  );
-}
-
-function sniffExt(bytes: Uint8Array): string | null {
-  if (bytes.length >= 6) {
-    const gif =
-      bytes[0] === 0x47 &&
-      bytes[1] === 0x49 &&
-      bytes[2] === 0x46 &&
-      bytes[3] === 0x38 &&
-      (bytes[4] === 0x39 || bytes[4] === 0x37) &&
-      bytes[5] === 0x61;
-    if (gif) return "gif";
-  }
-  if (bytes.length >= 8) {
-    const png =
-      bytes[0] === 0x89 &&
-      bytes[1] === 0x50 &&
-      bytes[2] === 0x4e &&
-      bytes[3] === 0x47;
-    if (png) return "png";
-  }
-  if (bytes.length >= 3) {
-    const jpg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    if (jpg) return "jpg";
-  }
-  if (bytes.length >= 12) {
-    const riff =
-      bytes[0] === 0x52 &&
-      bytes[1] === 0x49 &&
-      bytes[2] === 0x46 &&
-      bytes[3] === 0x46;
-    const webp =
-      bytes[8] === 0x57 &&
-      bytes[9] === 0x45 &&
-      bytes[10] === 0x42 &&
-      bytes[11] === 0x50;
-    if (riff && webp) return "webp";
-  }
-  return null;
-}
-
 export async function updateProfile(
   _prev: ProfileActionState,
   formData: FormData,
@@ -107,6 +52,11 @@ export async function updateProfile(
   });
   if (!parsed.success) {
     return { error: "Pseudo invalide (2–40 caractères)." };
+  }
+
+  const discord = parsed.data.discord?.trim() || null;
+  if (discord && /^javascript:/i.test(discord)) {
+    return { error: "Discord invalide." };
   }
 
   const smurfRaw = String(formData.get("smurfTags") ?? "");
@@ -134,19 +84,15 @@ export async function updateProfile(
     if (!Array.isArray(parsedLinks)) {
       return { error: "Liens invalides." };
     }
-    const cleaned = parsedLinks
-      .map((l: { label?: string; url?: string }) => {
-        const raw = String(l.label ?? "").trim();
-        const label = isSocialPlatformId(raw)
-          ? raw
-          : normalizeSocialPlatformId(raw);
-        return {
-          label,
-          url: String(l.url ?? "").trim().slice(0, 500),
-        };
-      })
-      .filter((l) => l.label && l.url && /^https?:\/\//i.test(l.url));
-    // Une URL par plateforme
+    const cleaned: { label: string; url: string }[] = [];
+    for (const item of parsedLinks as { label?: string; url?: string }[]) {
+      const raw = String(item.label ?? "").trim();
+      const label = isSocialPlatformId(raw)
+        ? raw
+        : normalizeSocialPlatformId(raw);
+      const url = sanitizeHttpUrl(String(item.url ?? ""));
+      if (label && url) cleaned.push({ label, url });
+    }
     const byPlatform = new Map<string, { label: string; url: string }>();
     for (const l of cleaned) byPlatform.set(l.label, l);
     links = [...byPlatform.values()].slice(0, 10);
@@ -169,7 +115,7 @@ export async function updateProfile(
       data: {
         displayName: parsed.data.displayName,
         battleTag: parsed.data.battleTag || null,
-        discord: parsed.data.discord || null,
+        discord,
         smurfTags,
         playerRoles: selectedRoles,
       },
@@ -197,43 +143,24 @@ export async function uploadAvatar(
   formData: FormData,
 ): Promise<ProfileActionState> {
   const user = await requireUser();
-  const raw = formData.get("avatar");
+  const h = await headers();
+  const ip = clientIpFromHeaders(h);
+  const limited = rateLimit(`upload:avatar:${user.id}:${ip}`, 10, 60 * 60 * 1000);
+  if (!limited.ok) {
+    return { error: `Trop d’uploads. Réessaie dans ${limited.retryAfterSec}s.` };
+  }
 
+  const raw = formData.get("avatar");
   if (!isUploadBlob(raw)) {
     return { error: "Choisis une image (PNG, JPG, WebP ou GIF)." };
   }
-  if (raw.size > MAX_AVATAR_BYTES) {
-    return { error: "Fichier trop lourd (max 5 Mo)." };
-  }
 
-  const buffer = Buffer.from(await raw.arrayBuffer());
-  const sniffed = sniffExt(buffer);
-  const mimeExt = raw.type ? ALLOWED_MIME[raw.type] : undefined;
-  const ext = sniffed ?? mimeExt;
+  const saved = await saveUploadedImage(raw, "avatars", user.id);
+  if ("error" in saved) return { error: saved.error };
 
-  if (!ext) {
-    return { error: "Format non supporté. Utilise PNG, JPG, WebP ou GIF." };
-  }
-
-  const dir = path.join(process.cwd(), "public", "uploads", "avatars");
-  await mkdir(dir, { recursive: true });
-
-  // Nettoie les anciennes extensions pour éviter les conflits jpg/gif
-  for (const oldExt of ["png", "jpg", "jpeg", "webp", "gif"]) {
-    try {
-      await unlink(path.join(dir, `${user.id}.${oldExt}`));
-    } catch {
-      /* ignore */
-    }
-  }
-
-  const filename = `${user.id}.${ext}`;
-  await writeFile(path.join(dir, filename), buffer);
-
-  const avatarUrl = `/uploads/avatars/${filename}?v=${Date.now()}`;
   await prisma.user.update({
     where: { id: user.id },
-    data: { avatarUrl },
+    data: { avatarUrl: saved.url },
   });
 
   revalidatePath("/", "layout");
@@ -259,6 +186,10 @@ export async function saveAvailability(
   const parsed = z.array(slotSchema).safeParse(slots);
   if (!parsed.success) {
     return { error: "Créneaux invalides." };
+  }
+
+  if (parsed.data.length > 40) {
+    return { error: "Trop de créneaux." };
   }
 
   for (const slot of parsed.data) {

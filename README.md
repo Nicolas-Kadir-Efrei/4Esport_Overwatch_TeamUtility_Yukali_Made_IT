@@ -6,19 +6,29 @@ Site équipe esport Overwatch (Next.js + Prisma + Neon Postgres).
 
 ```bash
 cp .env.example .env
-# Renseigne DATABASE_URL + AUTH_SECRET
+# Renseigne DATABASE_URL + AUTH_SECRET (+ ADMIN_PASSWORD pour seed)
 npm install
 npx prisma db push
-npm run db:demo   # optionnel
+npm run db:setup   # local seulement
 npm run dev
 ```
 
 ## Deploy Vercel
 
 1. Importe le repo sur Vercel.
-2. Dans **Settings → Environment Variables**, ajoute :
-   - `DATABASE_URL` — URL Neon **pooled** (`…-pooler…` / `sslmode=require`)
-   - `AUTH_SECRET` — secret aléatoire (ex. `openssl rand -base64 32`)
+2. Variables d’environnement :
+   - `DATABASE_URL` — Neon **pooled**
+   - `AUTH_SECRET` — secret long aléatoire
+   - `AUTH_URL` — URL publique du site (recommandé)
+   - `ADMIN_PASSWORD` — si tu seeds en prod (évite le défaut)
 3. Redeploy.
 
-Sans ces variables, le build ou le runtime échouent (Prisma / NextAuth).
+## Sécurité (résumé)
+
+- Rate-limit login/register
+- Sessions JWT 7j, invalidées si compte supprimé
+- Uploads : magic bytes + allowlist chemins, max 2 Mo
+- Headers : CSP, nosniff, frame deny
+- Contacts / dispos : visibles seulement aux membres de l’équipe (+ admin)
+- Dashboard / historique : scopés à ton équipe (admin = tout)
+- `db:demo` bloqué en production
