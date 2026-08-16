@@ -13,10 +13,11 @@ export function passwordPolicyHint() {
   return "Min. 10 caractères, avec lettre et chiffre.";
 }
 
-/** IDs sûrs pour noms de fichiers (cuid / alphanum). */
+/** IDs sûrs pour noms de fichiers (cuid / cuid2 / alphanum). */
 export function sanitizeFileBasename(raw: string): string | null {
   const cleaned = raw.trim();
-  if (!/^[a-zA-Z0-9_-]{8,64}$/.test(cleaned)) return null;
+  // cuid classique ~25, parfois un peu plus long
+  if (!/^[a-zA-Z0-9_-]{8,128}$/.test(cleaned)) return null;
   if (cleaned.includes("..") || cleaned.includes("/") || cleaned.includes("\\")) {
     return null;
   }

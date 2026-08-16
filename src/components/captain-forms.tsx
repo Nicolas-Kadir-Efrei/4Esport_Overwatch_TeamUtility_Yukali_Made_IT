@@ -98,13 +98,13 @@ export function TeamLogoForm({
           id="team-logo"
           name="logo"
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
           required
         />
         <p className="field-hint">PNG, JPG, WebP ou GIF · max 5 Mo</p>
         <Feedback state={state} />
-        <button className="btn btn-ghost text-sm" disabled={pending} type="submit">
-          {pending ? "…" : "Mettre à jour le logo"}
+        <button className="btn btn-primary text-sm" disabled={pending} type="submit">
+          {pending ? "Upload…" : "Mettre à jour le logo"}
         </button>
       </div>
     </form>
@@ -140,12 +140,13 @@ export function OpponentLogoForm({
           id="opp-logo"
           name="opponentLogo"
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
           required
         />
+        <p className="field-hint">PNG, JPG, WebP ou GIF · max 5 Mo</p>
         <Feedback state={state} />
-        <button className="btn btn-ghost text-sm" disabled={pending} type="submit">
-          {pending ? "…" : "Mettre à jour"}
+        <button className="btn btn-primary text-sm" disabled={pending} type="submit">
+          {pending ? "Upload…" : "Mettre à jour"}
         </button>
       </div>
     </form>

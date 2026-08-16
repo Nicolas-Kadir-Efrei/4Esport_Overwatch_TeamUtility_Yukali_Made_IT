@@ -95,13 +95,18 @@ export async function uploadTeamLogo(
     return { error: "Choisis une image (PNG, JPG, WebP ou GIF)." };
   }
 
-  const saved = await saveUploadedImage(file, "teams", teamId);
-  if ("error" in saved) return { error: saved.error };
+  try {
+    const saved = await saveUploadedImage(file, "teams", teamId);
+    if ("error" in saved) return { error: saved.error };
 
-  await prisma.team.update({
-    where: { id: teamId },
-    data: { logoUrl: saved.url },
-  });
+    await prisma.team.update({
+      where: { id: teamId },
+      data: { logoUrl: saved.url },
+    });
+  } catch (e) {
+    console.error("uploadTeamLogo", e);
+    return { error: "Échec de l’upload. Réessaie avec un fichier plus léger." };
+  }
 
   revalidateTeamAndMatch(teamId);
   return { success: "Logo d'équipe mis à jour." };
