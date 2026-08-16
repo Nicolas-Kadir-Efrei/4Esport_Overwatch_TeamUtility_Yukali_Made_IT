@@ -50,6 +50,20 @@ const credentialsSchema = z.object({
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 jours
 const JWT_REFRESH_MS = 60 * 60 * 1000; // 1h — évite une query Neon à chaque requête
 
+/**
+ * Chrome est strict sur les cookies Secure / préfixe __Secure-.
+ * En local (http://localhost), on force des cookies non-Secure host-only,
+ * même si AUTH_URL pointe vers le HTTPS de prod.
+ */
+const useSecureCookies =
+  process.env.VERCEL === "1" ||
+  (process.env.NODE_ENV === "production" &&
+    !!process.env.AUTH_URL?.startsWith("https://"));
+
+const sessionCookieName = useSecureCookies
+  ? "__Secure-authjs.session-token"
+  : "authjs.session-token";
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt",
@@ -58,6 +72,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: "/login",
+  },
+  useSecureCookies,
+  cookies: {
+    sessionToken: {
+      name: sessionCookieName,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+        // Pas de `domain` → cookie host-only (Chrome OK sur localhost)
+      },
+    },
   },
   providers: [
     Credentials({

@@ -47,7 +47,8 @@ export async function SiteNav() {
   const jar = await cookies();
   const hasSessionCookie = Boolean(
     jar.get("authjs.session-token")?.value ||
-      jar.get("__Secure-authjs.session-token")?.value,
+      jar.get("__Secure-authjs.session-token")?.value ||
+      jar.get("__Host-authjs.session-token")?.value,
   );
   if (!hasSessionCookie) {
     return <GuestNav />;
