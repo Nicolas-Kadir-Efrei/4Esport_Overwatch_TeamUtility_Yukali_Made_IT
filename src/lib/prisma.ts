@@ -3,13 +3,29 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
 /** Incrémente après un changement de schéma pour invalider le client global en dev. */
-const PRISMA_CLIENT_VERSION = "v6-pool-reuse";
+const PRISMA_CLIENT_VERSION = "v7-ssl-compat";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
   pgPool: Pool | undefined;
   prismaClientVersion?: string;
 };
+
+/** Évite le warning pg v8 sur sslmode=require (Neon). */
+function normalizeDatabaseUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    if (
+      url.searchParams.has("sslmode") &&
+      !url.searchParams.has("uselibpqcompat")
+    ) {
+      url.searchParams.set("uselibpqcompat", "true");
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
 
 function getPool() {
   if (!globalForPrisma.pgPool) {
@@ -20,7 +36,7 @@ function getPool() {
       );
     }
     globalForPrisma.pgPool = new Pool({
-      connectionString,
+      connectionString: normalizeDatabaseUrl(connectionString),
       max: 1,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 8_000,
