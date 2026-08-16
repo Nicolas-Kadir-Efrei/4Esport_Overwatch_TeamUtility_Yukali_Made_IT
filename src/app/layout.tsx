@@ -7,11 +7,15 @@ const display = Bebas_Neue({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-display",
+  display: "swap",
+  preload: true,
 });
 
 const body = Source_Sans_3({
   subsets: ["latin"],
   variable: "--font-body",
+  display: "swap",
+  preload: true,
 });
 
 export const metadata: Metadata = {

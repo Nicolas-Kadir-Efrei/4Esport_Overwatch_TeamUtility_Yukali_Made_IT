@@ -38,6 +38,7 @@ declare module "@auth/core/jwt" {
     teamTag?: string | null;
     avatarUrl?: string | null;
     displayName?: string;
+    refreshedAt?: number;
   }
 }
 
@@ -47,12 +48,13 @@ const credentialsSchema = z.object({
 });
 
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 jours
+const JWT_REFRESH_MS = 60 * 60 * 1000; // 1h — évite une query Neon à chaque requête
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt",
     maxAge: SESSION_MAX_AGE,
-    updateAge: 60 * 60, // refresh claims toutes les heures
+    updateAge: 60 * 60,
   },
   pages: {
     signIn: "/login",
@@ -74,7 +76,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
         });
 
-        // Compare toujours un hash pour limiter l’oracle de timing
         const hash =
           user?.passwordHash ??
           "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidiu";
@@ -105,6 +106,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.teamId = user.teamId;
         token.teamRole = user.teamRole;
         token.teamTag = user.teamTag;
+        token.refreshedAt = Date.now();
         return token;
       }
 
@@ -112,12 +114,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return {};
       }
 
+      // Réutilise les claims JWT sauf refresh horaire (perf)
+      if (
+        token.refreshedAt &&
+        Date.now() - token.refreshedAt < JWT_REFRESH_MS &&
+        token.role &&
+        token.displayName
+      ) {
+        return token;
+      }
+
       const fresh = await prisma.user.findUnique({
         where: { id: token.id },
-        include: { membership: { include: { team: true } } },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          displayName: true,
+          avatarUrl: true,
+          membership: {
+            select: {
+              teamId: true,
+              role: true,
+              team: { select: { tag: true } },
+            },
+          },
+        },
       });
 
-      // Compte supprimé / désactivé → invalide le JWT
       if (!fresh) {
         return {};
       }
@@ -129,6 +153,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       token.teamId = fresh.membership?.teamId ?? null;
       token.teamRole = fresh.membership?.role ?? null;
       token.teamTag = fresh.membership?.team.tag ?? null;
+      token.refreshedAt = Date.now();
       return token;
     },
     async session({ session, token }) {
