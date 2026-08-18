@@ -64,7 +64,7 @@ const sessionCookieName = useSecureCookies
   ? "__Secure-authjs.session-token"
   : "authjs.session-token";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   session: {
     strategy: "jwt",
     maxAge: SESSION_MAX_AGE,
@@ -123,7 +123,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id!;
         token.email = user.email!;
@@ -141,8 +141,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return {};
       }
 
+      if (trigger === "update") {
+        if (session?.user && "avatarUrl" in session.user) {
+          token.avatarUrl = session.user.avatarUrl;
+        }
+        token.refreshedAt = 0;
+      }
+
       // Réutilise les claims JWT sauf refresh horaire (perf)
       if (
+        trigger !== "update" &&
         token.refreshedAt &&
         Date.now() - token.refreshedAt < JWT_REFRESH_MS &&
         token.role &&

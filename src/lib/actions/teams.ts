@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { isUploadBlob, saveUploadedImage } from "@/lib/uploads";
+import { seedMatchLineup, seedPlayerOnUpcomingMatches } from "@/lib/lineup";
 
 export type TeamActionState = {
   error?: string;
@@ -146,6 +147,8 @@ export async function reviewJoinRequest(
     }),
   ]);
 
+  await seedPlayerOnUpcomingMatches(request.userId, request.teamId);
+
   revalidatePath("/admin");
   revalidatePath("/teams");
   revalidatePath("/dashboard");
@@ -168,8 +171,16 @@ export async function createMatch(
   formData: FormData,
 ): Promise<TeamActionState> {
   const user = await requireUser();
-  if (user.role !== "ADMIN" && user.teamRole !== "CAPTAIN") {
-    return { error: "Seuls admin et capitaines peuvent créer un match." };
+  const membership =
+    user.role === "ADMIN"
+      ? null
+      : await prisma.teamMember.findUnique({
+          where: { userId: user.id },
+          select: { teamId: true, role: true },
+        });
+
+  if (user.role !== "ADMIN" && membership?.role !== "CAPTAIN") {
+    return { error: "Seuls le capitaine de l’équipe (ou un admin) peuvent créer un match." };
   }
 
   const parsed = matchSchema.safeParse({
@@ -184,8 +195,10 @@ export async function createMatch(
     return { error: "Formulaire match invalide." };
   }
 
-  if (user.role !== "ADMIN" && parsed.data.teamId !== user.teamId) {
-    return { error: "Tu ne peux créer un match que pour ton équipe." };
+  if (user.role !== "ADMIN") {
+    if (!membership || parsed.data.teamId !== membership.teamId) {
+      return { error: "Tu ne peux créer un match que pour ton équipe." };
+    }
   }
 
   const when = new Date(parsed.data.scheduledAt);
@@ -204,6 +217,8 @@ export async function createMatch(
       createdById: user.id,
     },
   });
+
+  await seedMatchLineup(match.id, parsed.data.teamId);
 
   const oppLogo = formData.get("opponentLogo");
   if (isUploadBlob(oppLogo)) {

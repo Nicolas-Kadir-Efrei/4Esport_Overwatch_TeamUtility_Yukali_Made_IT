@@ -26,7 +26,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={`${display.variable} ${body.variable} h-full`}>
+    <html
+      lang="fr"
+      data-scroll-behavior="smooth"
+      className={`${display.variable} ${body.variable} h-full`}
+    >
       <body className="min-h-full flex flex-col antialiased">
         <SiteNav />
         <div className="flex flex-1 flex-col">{children}</div>

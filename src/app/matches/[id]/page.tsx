@@ -1,42 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format } from "date-fns";
-import { fr } from "date-fns/locale";
-import { MatchAvailabilityBoard } from "@/components/match-board";
-import { MatchPlayerAvailabilityList } from "@/components/availability-views";
+import { MatchDateBlock } from "@/components/match-board";
 import { AdminMatchForm } from "@/components/admin-forms";
 import {
+  DeleteMatchLinkButton,
+  MatchContactTagsForm,
+  MatchEditForm,
+  MatchLinkForm,
   MatchScoreForm,
   OpponentLogoForm,
 } from "@/components/captain-forms";
 import { LineupBoard } from "@/components/lineup-board";
+import { MatchRsvpCard } from "@/components/match-rsvp";
+import { MatchMediaLink } from "@/components/match-media-link";
 import { TeamLogo } from "@/components/team-logo";
 import { adminDeleteMatch } from "@/lib/actions/admin";
-import { formatMatchResult, formatMatchType } from "@/lib/constants";
+import {
+  formatMatchResult,
+  formatMatchType,
+  lineupStatusClass,
+} from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { canManageTeam, canViewTeamContacts, requireUser } from "@/lib/session";
-
-function statusLabel(status: string) {
-  switch (status) {
-    case "PRESENT":
-      return "Présent";
-    case "ABSENT":
-      return "Absent";
-    default:
-      return "En attente";
-  }
-}
-
-function statusClass(status: string) {
-  switch (status) {
-    case "PRESENT":
-      return "avail-yes";
-    case "ABSENT":
-      return "avail-no";
-    default:
-      return "avail-maybe";
-  }
-}
 
 export default async function MatchDetailPage({
   params,
@@ -51,6 +36,7 @@ export default async function MatchDetailPage({
     include: {
       team: true,
       createdBy: true,
+      links: { orderBy: { createdAt: "desc" } },
       lineup: {
         include: {
           user: {
@@ -65,7 +51,7 @@ export default async function MatchDetailPage({
 
   const members = await prisma.teamMember.findMany({
     where: { teamId: match.teamId },
-    include: { user: { include: { availabilities: true } } },
+    include: { user: true },
     orderBy: { joinedAt: "asc" },
   });
 
@@ -77,18 +63,9 @@ export default async function MatchDetailPage({
   const isManager = await canManageTeam(match.teamId);
   const showContacts = await canViewTeamContacts(match.teamId);
   const lineupByUser = new Map(match.lineup.map((l) => [l.userId, l]));
-
-  const boardMembers = members.map((m) => ({
-    id: m.user.id,
-    displayName: m.user.displayName,
-    avatarUrl: m.user.avatarUrl,
-    battleTag: m.user.battleTag,
-    smurfTags: showContacts ? m.user.smurfTags : [],
-    playerRoles: m.user.playerRoles,
-    role: m.role,
-    teamRole: m.role,
-    availabilities: showContacts ? m.user.availabilities : [],
-  }));
+  const isOnThisTeam = members.some((m) => m.userId === user.id);
+  const myLineup = lineupByUser.get(user.id);
+  const matchOpen = match.result === "SCHEDULED";
 
   const lineupMembers = members.map((m) => {
     const entry = lineupByUser.get(m.userId);
@@ -126,12 +103,15 @@ export default async function MatchDetailPage({
       <article className="panel overflow-hidden fade-up">
         <div className="match-rail" style={{ background: match.team.color }} />
         <div className="p-6">
-          <div className="flex flex-wrap gap-2">
-            <span className="chip avail-maybe">{formatMatchType(match.type)}</span>
-            <span className={`chip ${statusClass(match.result === "WIN" ? "PRESENT" : match.result === "LOSS" ? "ABSENT" : "PENDING")}`}>
-              {formatMatchResult(match.result)}
-            </span>
-            {match.score && <span className="chip">{match.score}</span>}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap gap-2">
+              <span className="chip avail-maybe">{formatMatchType(match.type)}</span>
+              <span className={`chip ${lineupStatusClass(match.result === "WIN" ? "PRESENT" : match.result === "LOSS" ? "ABSENT" : "PENDING")}`}>
+                {formatMatchResult(match.result)}
+              </span>
+              {match.score && <span className="chip">{match.score}</span>}
+            </div>
+            <MatchDateBlock date={match.scheduledAt} large />
           </div>
 
           <div className="match-vs mt-5">
@@ -146,7 +126,7 @@ export default async function MatchDetailPage({
               <p className="match-vs-name">[{match.team.tag}] {match.team.name}</p>
             </div>
             <div className="match-vs-center">
-              <p className="font-display text-3xl text-[var(--accent)]">VS</p>
+              <p className="section-title text-[var(--muted)]">VS</p>
               {match.score && (
                 <p className="mt-1 text-sm font-semibold text-[var(--muted)]">
                   {match.score}
@@ -165,22 +145,57 @@ export default async function MatchDetailPage({
           </div>
 
           {match.title && <p className="mt-4 text-lg text-[var(--muted)]">{match.title}</p>}
-          <p className="mt-4 font-medium">
-            {format(match.scheduledAt, "EEEE d MMMM yyyy · HH:mm", { locale: fr })}
-          </p>
+          {match.contactBattleTags.length > 0 && (
+            <div className="mt-4">
+              <p className="label">BattleTags à contacter</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {match.contactBattleTags.map((tag) => (
+                  <span key={tag} className="chip avail-maybe">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="mt-1 text-sm text-[var(--muted)]">
             {match.createdBy ? `Créé par ${match.createdBy.displayName}` : ""}
           </p>
-          {match.notes && (
-            <p className="mt-4 text-sm text-[var(--muted)]">{match.notes}</p>
+          {match.links.length > 0 && (
+            <ul className="mt-4 space-y-2">
+              {match.links.map((l) => (
+                <li key={l.id}>
+                  <MatchMediaLink
+                    title={l.title}
+                    url={l.url}
+                    description={l.description}
+                  />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </article>
 
+      {isOnThisTeam && (
+        <MatchRsvpCard
+          matchId={match.id}
+          userId={user.id}
+          status={(myLineup?.status ?? "PENDING") as "PRESENT" | "ABSENT" | "PENDING"}
+          opponent={match.opponent}
+          locked={!matchOpen}
+        />
+      )}
+
       {isManager && (
         <section className="panel mt-8 space-y-6 p-5">
-          <div>
-            <h2 className="font-display mb-3 text-2xl">Score (capitaine)</h2>
+          {user.role !== "ADMIN" && (
+            <div>
+              <h2 className="section-title mb-3">Modifier le match</h2>
+              <MatchEditForm match={match} />
+            </div>
+          )}
+          <div className={user.role !== "ADMIN" ? "border-t border-[var(--line)] pt-5" : ""}>
+            <h2 className="section-title mb-3">Score</h2>
             <MatchScoreForm
               matchId={match.id}
               result={match.result}
@@ -188,62 +203,80 @@ export default async function MatchDetailPage({
             />
           </div>
           <div className="border-t border-[var(--line)] pt-5">
-            <h3 className="font-display mb-3 text-xl">Logo adversaire</h3>
+            <h3 className="section-title mb-3">Logo adversaire</h3>
             <OpponentLogoForm
               matchId={match.id}
               opponent={match.opponent}
               opponentLogoUrl={match.opponentLogoUrl}
             />
           </div>
+          <div className="border-t border-[var(--line)] pt-5">
+            <h3 className="section-title mb-1">Contact match</h3>
+            <p className="mb-4 text-sm text-[var(--muted)]">
+              BattleTag(s) à ajouter / contacter pour ce scrim.
+            </p>
+            <MatchContactTagsForm
+              matchId={match.id}
+              contactBattleTags={match.contactBattleTags}
+            />
+          </div>
+          <div className="border-t border-[var(--line)] pt-5">
+            <h3 className="section-title mb-1">Liens du match</h3>
+            <p className="mb-4 text-sm text-[var(--muted)]">
+              VOD, Twitch, replay — visibles par l’équipe.
+            </p>
+            {match.links.length > 0 && (
+              <ul className="mb-4 space-y-2">
+                {match.links.map((l) => (
+                  <li
+                    key={l.id}
+                    className="flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <MatchMediaLink
+                        title={l.title}
+                        url={l.url}
+                        description={l.description}
+                      />
+                    </div>
+                    <DeleteMatchLinkButton linkId={l.id} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <MatchLinkForm matchId={match.id} />
+          </div>
         </section>
       )}
 
       {showContacts && (
       <section className="panel mt-8 p-5">
-        <h2 className="font-display mb-2 text-3xl">Lineup</h2>
+        <h2 className="section-title mb-2">Présence</h2>
         <p className="mb-4 text-sm text-[var(--muted)]">
-          Choisis qui joue et leur statut en un clic.
+          {matchOpen
+            ? "Indique ta présence. Le capitaine choisit qui joue."
+            : "Match clos — les statuts ne peuvent plus être changés."}
         </p>
         <LineupBoard
           matchId={match.id}
           members={lineupMembers}
           isManager={isManager}
           currentUserId={user.id}
+          locked={!matchOpen}
         />
       </section>
-      )}
-
-      {showContacts && (
-      <section className="mt-8">
-        <h2 className="font-display mb-2 text-3xl">Disponibilités au créneau</h2>
-        <MatchPlayerAvailabilityList
-          members={boardMembers}
-          scheduledAt={match.scheduledAt}
-        />
-      </section>
-      )}
-
-      {showContacts && match.result === "SCHEDULED" && (
-        <section className="mt-8">
-          <h2 className="font-display mb-4 text-3xl">Vue match</h2>
-          <MatchAvailabilityBoard
-            matches={[match]}
-            members={boardMembers}
-            linkToMatch={false}
-          />
-        </section>
       )}
 
       {!showContacts && (
         <p className="mt-8 text-sm text-[var(--muted)]">
-          Lineup et dispos réservés aux membres de l&apos;équipe.
+          Présence réservée aux membres de l&apos;équipe.
         </p>
       )}
 
       {user.role === "ADMIN" && (
         <section className="panel mt-10 p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-3xl">Admin · éditer</h2>
+            <h2 className="section-title">Admin · éditer</h2>
             <form action={adminDeleteMatch}>
               <input type="hidden" name="id" value={match.id} />
               <button className="btn btn-danger text-xs" type="submit">

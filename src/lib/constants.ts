@@ -75,6 +75,34 @@ export function formatPlayerRolesShort(roles: string[]) {
   return roles.map(formatPlayerRole).join(" · ");
 }
 
+export const LINEUP_STATUS_OPTIONS = [
+  { value: "PRESENT", label: "Présent", className: "avail-yes" },
+  { value: "PENDING", label: "Indécis", className: "avail-maybe" },
+  { value: "ABSENT", label: "Absent", className: "avail-no" },
+] as const;
+
+export function formatLineupStatus(status: string | null | undefined) {
+  switch (status) {
+    case "PRESENT":
+      return "Présent";
+    case "ABSENT":
+      return "Absent";
+    default:
+      return "Indécis";
+  }
+}
+
+export function lineupStatusClass(status: string | null | undefined) {
+  switch (status) {
+    case "PRESENT":
+      return "avail-yes";
+    case "ABSENT":
+      return "avail-no";
+    default:
+      return "avail-maybe";
+  }
+}
+
 export function overlapsSlot(
   dayOfWeek: number,
   matchHour: number,

@@ -23,6 +23,19 @@ export function getSocialPlatform(id: string) {
   return SOCIAL_PLATFORMS.find((p) => p.id === id) ?? SOCIAL_PLATFORMS.find((p) => p.id === "website")!;
 }
 
+export function detectLinkPlatformFromUrl(url: string): SocialPlatformId {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.includes("twitch.tv")) return "twitch";
+    if (host.includes("youtube.com") || host.includes("youtu.be")) return "youtube";
+    if (host.includes("kick.com")) return "kick";
+    if (host.includes("tiktok.com")) return "tiktok";
+  } catch {
+    /* ignore */
+  }
+  return normalizeSocialPlatformId(url);
+}
+
 export function normalizeSocialPlatformId(raw: string): SocialPlatformId {
   const lower = raw.trim().toLowerCase();
   if (isSocialPlatformId(lower)) return lower;

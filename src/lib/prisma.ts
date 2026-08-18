@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
 /** Incrémente après un changement de schéma pour invalider le client global en dev. */
-const PRISMA_CLIENT_VERSION = "v7-ssl-compat";
+const PRISMA_CLIENT_VERSION = "v7-captain-contact-tags";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

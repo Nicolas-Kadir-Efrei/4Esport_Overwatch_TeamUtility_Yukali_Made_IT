@@ -33,7 +33,7 @@ export default async function ProfilePage() {
         <div className="flex flex-wrap items-center gap-4 border-b border-[var(--line)] bg-black/15 px-5 py-4">
           <Avatar src={user.avatarUrl} name={user.displayName} size="lg" />
           <div>
-            <p className="font-display text-2xl">{user.displayName}</p>
+            <p className="section-title">{user.displayName}</p>
             <p className="text-sm text-[var(--muted)]">
               {user.role === "ADMIN" ? "Admin" : "Joueur"}
               {user.membership
@@ -63,7 +63,7 @@ export default async function ProfilePage() {
           </div>
         </div>
         <div className="p-5">
-          <h2 className="font-display mb-4 text-2xl">Identité & rôles</h2>
+          <h2 className="section-title mb-4">Identité & rôles</h2>
           <ProfileForm
             displayName={user.displayName}
             battleTag={user.battleTag}
@@ -76,7 +76,7 @@ export default async function ProfilePage() {
       </section>
 
       <section className="panel fade-up mb-5 p-5">
-        <h2 className="font-display mb-1 text-2xl">Photo de profil</h2>
+        <h2 className="section-title mb-1">Photo de profil</h2>
         <p className="mb-4 text-sm text-[var(--muted)]">
           PNG, JPG, WebP ou GIF animé — jusqu’à 5 Mo.
         </p>
@@ -84,7 +84,7 @@ export default async function ProfilePage() {
       </section>
 
       <section className="panel fade-up p-5">
-        <h2 className="font-display mb-1 text-2xl">Disponibilités</h2>
+        <h2 className="section-title mb-1">Disponibilités</h2>
         <p className="mb-4 text-sm text-[var(--muted)]">
           Ajoute tes créneaux, puis enregistre. Clique un créneau pour le retirer.
         </p>

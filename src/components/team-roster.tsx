@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
 import { KickMemberButton } from "@/components/captain-forms";
+import { PlayerName } from "@/components/captain-crown";
 import {
   DiscordIcon,
   SocialPlatformIcon,
@@ -47,7 +48,10 @@ export function TeamRoster({
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="eyebrow">Lineup</p>
-          <h2 className="font-display text-3xl">Roster & contacts</h2>
+          <h2 className="section-title">Roster</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Qui est dans l&apos;équipe, et sur quels rôles.
+          </p>
         </div>
         <p className="text-sm text-[var(--muted)]">
           {members.length} joueur{members.length > 1 ? "s" : ""}
@@ -86,10 +90,12 @@ export function TeamRoster({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="roster-name truncate">{m.user.displayName}</p>
-                        {isCaptain && (
-                          <span className="roster-badge">Capitaine</span>
-                        )}
+                        <p className="roster-name min-w-0">
+                          <PlayerName
+                            name={m.user.displayName}
+                            captain={isCaptain}
+                          />
+                        </p>
                       </div>
                       <p className="roster-tag truncate">
                         {m.user.battleTag ?? "Pas de BattleTag"}
@@ -100,15 +106,19 @@ export function TeamRoster({
                     )}
                   </div>
 
-                  {m.user.playerRoles.length > 0 && (
-                    <div className="roster-roles">
-                      {m.user.playerRoles.map((r) => (
+                  <div className="roster-roles">
+                    {m.user.playerRoles.length > 0 ? (
+                      m.user.playerRoles.map((r) => (
                         <span key={r} className="roster-role">
                           {formatPlayerRole(r)}
                         </span>
-                      ))}
-                    </div>
-                  )}
+                      ))
+                    ) : (
+                      <span className="text-xs text-[var(--muted)]">
+                        Aucun rôle renseigné
+                      </span>
+                    )}
+                  </div>
 
                   {showContacts && (
                   <div className="roster-contacts">

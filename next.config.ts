@@ -25,22 +25,24 @@ const securityHeaders = [
   },
 ];
 
+const serverActionOrigins = (() => {
+  const hosts = new Set<string>(["localhost:3000", "127.0.0.1:3000"]);
+  if (process.env.VERCEL_URL) hosts.add(process.env.VERCEL_URL);
+  if (process.env.AUTH_URL) {
+    try {
+      hosts.add(new URL(process.env.AUTH_URL).host);
+    } catch {
+      /* ignore */
+    }
+  }
+  return [...hosts];
+})();
+
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: "6mb",
-      allowedOrigins: (() => {
-        const hosts = new Set<string>(["localhost:3000", "127.0.0.1:3000"]);
-        if (process.env.VERCEL_URL) hosts.add(process.env.VERCEL_URL);
-        if (process.env.AUTH_URL) {
-          try {
-            hosts.add(new URL(process.env.AUTH_URL).host);
-          } catch {
-            /* ignore */
-          }
-        }
-        return [...hosts];
-      })(),
+      allowedOrigins: serverActionOrigins,
     },
   },
   poweredByHeader: false,

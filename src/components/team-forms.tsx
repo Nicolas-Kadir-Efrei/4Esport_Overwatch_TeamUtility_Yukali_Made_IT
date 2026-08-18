@@ -14,32 +14,36 @@ export function JoinTeamForm({
   teamId,
   teamName,
   disabled,
+  compact = false,
 }: {
   teamId: string;
   teamName: string;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const [state, action, pending] = useActionState(requestJoinTeam, initial);
 
   return (
-    <form action={action} className="space-y-3">
+    <form action={action} className={compact ? "flex flex-wrap items-center gap-2" : "space-y-3"}>
       <input type="hidden" name="teamId" value={teamId} />
-      <div>
-        <label className="label" htmlFor={`msg-${teamId}`}>
-          Message (optionnel)
-        </label>
-        <textarea
-          className="input min-h-20"
-          id={`msg-${teamId}`}
-          name="message"
-          placeholder={`Pourquoi rejoindre ${teamName} ?`}
-          disabled={disabled}
-        />
-      </div>
-      {state.error && <p className="alert alert-error">{state.error}</p>}
-      {state.success && <p className="alert alert-ok">{state.success}</p>}
+      {!compact && (
+        <div>
+          <label className="label" htmlFor={`msg-${teamId}`}>
+            Message (optionnel)
+          </label>
+          <textarea
+            className="input min-h-20"
+            id={`msg-${teamId}`}
+            name="message"
+            placeholder={`Pourquoi rejoindre ${teamName} ?`}
+            disabled={disabled}
+          />
+        </div>
+      )}
+      {state.error && <p className="alert alert-error w-full">{state.error}</p>}
+      {state.success && <p className="alert alert-ok w-full">{state.success}</p>}
       <button
-        className="btn btn-primary text-xs"
+        className={`btn text-xs ${compact ? "btn-ghost" : "btn-primary"}`}
         type="submit"
         disabled={disabled || pending}
       >
@@ -79,32 +83,48 @@ export function ReviewRequestForm({ requestId }: { requestId: string }) {
 export function CreateMatchForm({
   teams,
   defaultTeamId,
+  lockTeam = false,
 }: {
   teams: { id: string; name: string; tag: string }[];
   defaultTeamId?: string | null;
+  lockTeam?: boolean;
 }) {
   const [state, action, pending] = useActionState(createMatch, initial);
+  const locked =
+    lockTeam && Boolean(defaultTeamId) && teams.length === 1
+      ? teams[0]
+      : null;
 
   return (
     <form action={action} className="grid gap-3 md:grid-cols-2">
-      <div>
-        <label className="label" htmlFor="teamId">
-          Équipe
-        </label>
-        <select
-          className="input"
-          id="teamId"
-          name="teamId"
-          defaultValue={defaultTeamId ?? teams[0]?.id}
-          required
-        >
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              [{t.tag}] {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {locked ? (
+        <div>
+          <p className="label">Équipe</p>
+          <input type="hidden" name="teamId" value={locked.id} />
+          <p className="input pointer-events-none opacity-80">
+            [{locked.tag}] {locked.name}
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label className="label" htmlFor="teamId">
+            Équipe
+          </label>
+          <select
+            className="input"
+            id="teamId"
+            name="teamId"
+            defaultValue={defaultTeamId ?? teams[0]?.id}
+            required
+          >
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                [{t.tag}] {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div>
         <label className="label" htmlFor="type">
           Type

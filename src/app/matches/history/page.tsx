@@ -101,7 +101,7 @@ export default async function MatchHistoryPage({
                     size="md"
                   />
                   <div>
-                    <p className="font-display text-xl">vs {m.opponent}</p>
+                    <p className="match-heading">vs {m.opponent}</p>
                     <p className="text-sm text-[var(--muted)]">
                       [{m.team.tag}] {m.team.name} · {formatMatchType(m.type)}
                       {m.title ? ` · ${m.title}` : ""}

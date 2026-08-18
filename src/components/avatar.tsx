@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 type AvatarProps = {
   src?: string | null;
   name: string;
@@ -13,15 +17,17 @@ const sizes = {
 };
 
 export function Avatar({ src, name, size = "md", className = "" }: AvatarProps) {
+  const [broken, setBroken] = useState(false);
   const initial = name.trim().slice(0, 1).toUpperCase() || "?";
 
-  if (src) {
+  if (src && !broken) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={name}
         className={`avatar-frame object-cover ${sizes[size]} ${className}`}
+        onError={() => setBroken(true)}
       />
     );
   }

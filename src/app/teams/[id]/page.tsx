@@ -2,11 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { JoinTeamForm } from "@/components/team-forms";
+import { CreateMatchForm, JoinTeamForm } from "@/components/team-forms";
 import { TeamAvailabilityOverview } from "@/components/availability-views";
 import { MatchAvailabilityBoard } from "@/components/match-board";
 import {
   DeleteTeamLinkButton,
+  SetCaptainForm,
   TeamLinkForm,
   TeamLogoForm,
 } from "@/components/captain-forms";
@@ -14,7 +15,6 @@ import { TeamRoster } from "@/components/team-roster";
 import { TeamLogo } from "@/components/team-logo";
 import {
   formatMatchResult,
-  overlapsSlot,
 } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { canManageTeam, canViewTeamContacts, requireUser } from "@/lib/session";
@@ -58,6 +58,11 @@ export default async function TeamDetailPage({
       },
       orderBy: { scheduledAt: "asc" },
       take: 10,
+      include: {
+        lineup: {
+          select: { userId: true, status: true, matchId: true },
+        },
+      },
     }),
     prisma.match.findMany({
       where: {
@@ -82,6 +87,23 @@ export default async function TeamDetailPage({
   const historyClean = history.filter((m) => !historyIds.has(m.id));
   const canApply = !membership;
   const isOnThisTeam = membership?.teamId === team.id;
+  const myMatchStatuses = Object.fromEntries(
+    upcoming.flatMap((m) =>
+      m.lineup
+        .filter((l) => l.userId === user.id)
+        .map((l) => [l.matchId, l.status]),
+    ),
+  ) as Record<string, "PRESENT" | "ABSENT" | "PENDING">;
+
+  const presenceByMatch: Record<
+    string,
+    Record<string, "PRESENT" | "ABSENT" | "PENDING">
+  > = {};
+  for (const m of upcoming) {
+    presenceByMatch[m.id] = Object.fromEntries(
+      m.lineup.map((l) => [l.userId, l.status]),
+    );
+  }
 
   const availabilityMembers = team.members.map((m) => ({
     id: m.user.id,
@@ -144,8 +166,45 @@ export default async function TeamDetailPage({
         </div>
       </div>
 
+      <TeamRoster
+        teamId={team.id}
+        members={team.members}
+        accentColor={team.color}
+        isManager={isManager}
+        currentUserId={user.id}
+        isAdmin={user.role === "ADMIN"}
+        showProfileHint={isOnThisTeam}
+        showContacts={showContacts}
+      />
+
+      {isManager && (
+        <section className="panel mb-10 p-5">
+          <h2 className="section-title mb-1">Capitaine</h2>
+          <p className="mb-4 text-sm text-[var(--muted)]">
+            Un seul capitaine par équipe. Il peut planifier les matches, les
+            scores et les liens VOD.
+          </p>
+          <SetCaptainForm
+            teamId={team.id}
+            members={team.members.map((m) => ({
+              userId: m.userId,
+              displayName: m.user.displayName,
+              role: m.role,
+            }))}
+          />
+        </section>
+      )}
+
       <section className="mb-10">
-        <h2 className="font-display mb-2 text-3xl">Liens de l&apos;équipe</h2>
+        <h2 className="section-title mb-2">Disponibilités</h2>
+        <p className="mb-4 text-sm text-[var(--muted)]">
+          Vue hebdo des créneaux de tout le roster.
+        </p>
+        <TeamAvailabilityOverview members={availabilityMembers} />
+      </section>
+
+      <section className="mb-10">
+        <h2 className="section-title mb-2">Liens de l&apos;équipe</h2>
         <p className="mb-4 text-sm text-[var(--muted)]">
           Discord, docs, brackets… ajoutés par le capitaine ou l&apos;admin.
         </p>
@@ -178,36 +237,15 @@ export default async function TeamDetailPage({
         </ul>
         {isManager && (
           <div className="panel p-5">
-            <h3 className="font-display mb-3 text-xl">Ajouter un lien</h3>
+            <h3 className="section-title mb-3">Ajouter un lien</h3>
             <TeamLinkForm teamId={team.id} />
           </div>
         )}
       </section>
 
-      <TeamRoster
-        teamId={team.id}
-        members={team.members}
-        accentColor={team.color}
-        isManager={isManager}
-        currentUserId={user.id}
-        isAdmin={user.role === "ADMIN"}
-        showProfileHint={isOnThisTeam}
-        showContacts={showContacts}
-      />
-
-      {showContacts && (
-      <section className="mb-10">
-        <h2 className="font-display mb-2 text-3xl">Disponibilités</h2>
-        <p className="mb-4 text-sm text-[var(--muted)]">
-          Vue hebdo des créneaux de tout le roster.
-        </p>
-        <TeamAvailabilityOverview members={availabilityMembers} />
-      </section>
-      )}
-
       {canApply && (
         <section className="panel mb-10 p-5">
-          <h2 className="font-display mb-3 text-2xl">Rejoindre</h2>
+          <h2 className="section-title mb-3">Rejoindre</h2>
           {myRequest?.status === "PENDING" ? (
             <p className="alert alert-ok">Demande en attente.</p>
           ) : (
@@ -223,65 +261,49 @@ export default async function TeamDetailPage({
         </section>
       )}
 
+      {isManager && (
+        <section className="panel mb-10 p-5">
+          <h2 className="section-title mb-1">Planifier un match</h2>
+          <p className="mb-4 text-sm text-[var(--muted)]">
+            {user.role === "ADMIN"
+              ? `Planifie un match pour [${team.tag}] ${team.name}.`
+              : `En tant que capitaine, tu ne planifies que pour [${team.tag}] ${team.name}.`}
+          </p>
+          <CreateMatchForm
+            teams={[{ id: team.id, name: team.name, tag: team.tag }]}
+            defaultTeamId={team.id}
+            lockTeam
+          />
+        </section>
+      )}
+
       <section className="mb-10">
-        <h2 className="font-display mb-4 text-3xl">Matches à venir</h2>
+        <h2 className="section-title mb-4">Matches à venir</h2>
         {upcoming.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">Rien de planifié.</p>
         ) : (
           <div className="space-y-4">
-            {upcoming.map((m) => {
-              const d = new Date(m.scheduledAt);
-              const dispoCount = showContacts
-                ? availabilityMembers.filter((mem) =>
-                    overlapsSlot(
-                      d.getDay(),
-                      d.getHours(),
-                      d.getMinutes(),
-                      mem.availabilities,
-                    ),
-                  ).length
-                : null;
-              return (
-                <div key={m.id} className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                    <Link
-                      href={`/matches/${m.id}`}
-                      className="flex items-center gap-2 font-display text-xl hover:text-[var(--accent)]"
-                    >
-                      <TeamLogo
-                        src={m.opponentLogoUrl}
-                        name={m.opponent}
-                        tag={m.opponent.slice(0, 3)}
-                        size="sm"
-                      />
-                      vs {m.opponent}
-                    </Link>
-                    <span className="text-sm text-[var(--cyan)]">
-                      {dispoCount !== null
-                        ? `${dispoCount}/${availabilityMembers.length} dispo · `
-                        : ""}
-                      {format(m.scheduledAt, "EEE d MMM · HH:mm", { locale: fr })}
-                    </span>
-                  </div>
-                  {showContacts && (
-                    <MatchAvailabilityBoard
-                      matches={[{ ...m, team }]}
-                      members={availabilityMembers.map((mem) => ({
-                        ...mem,
-                        role: mem.teamRole ?? "PLAYER",
-                      }))}
-                    />
-                  )}
-                </div>
-              );
-            })}
+            {upcoming.map((m) => (
+              <MatchAvailabilityBoard
+                key={m.id}
+                matches={[{ ...m, team }]}
+                members={availabilityMembers.map((mem) => ({
+                  ...mem,
+                  role: mem.teamRole ?? "PLAYER",
+                }))}
+                currentUserId={isOnThisTeam ? user.id : undefined}
+                myStatuses={myMatchStatuses}
+                rsvpTeamId={isOnThisTeam ? team.id : undefined}
+                presenceByMatch={presenceByMatch}
+              />
+            ))}
           </div>
         )}
       </section>
 
       <section>
         <div className="mb-4 flex items-end justify-between gap-3">
-          <h2 className="font-display text-3xl">Historique</h2>
+          <h2 className="section-title">Historique</h2>
           <Link
             href={`/matches/history?team=${team.id}`}
             className="text-sm text-[var(--accent)]"

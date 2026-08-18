@@ -112,8 +112,9 @@ export async function saveUploadedImage(
     }
   }
 
-  const filename = `${safeBase}.${ext}`;
-  const fullPath = path.join(resolvedDir, filename);
+  const stamp = Date.now();
+  let filename = `${safeBase}.${ext}`;
+  let fullPath = path.join(resolvedDir, filename);
   if (!isPathInside(resolvedDir, fullPath)) {
     return { error: "Chemin upload invalide." };
   }
@@ -121,12 +122,22 @@ export async function saveUploadedImage(
   try {
     await writeFile(fullPath, buffer);
   } catch (e) {
-    console.error("upload write failed", e);
-    return {
-      error:
-        "Écriture impossible. Sur Vercel le disque n’est pas persistant — utilise le mode local ou un stockage cloud.",
-    };
+    console.error("upload write failed, retry unique name", e);
+    filename = `${safeBase}-${stamp}.${ext}`;
+    fullPath = path.join(resolvedDir, filename);
+    if (!isPathInside(resolvedDir, fullPath)) {
+      return { error: "Chemin upload invalide." };
+    }
+    try {
+      await writeFile(fullPath, buffer);
+    } catch (retryErr) {
+      console.error("upload write retry failed", retryErr);
+      return {
+        error:
+          "Écriture impossible. Sur Vercel le disque n’est pas persistant — utilise le mode local ou un stockage cloud.",
+      };
+    }
   }
 
-  return { url: `/uploads/${safeSub}/${filename}?v=${Date.now()}` };
+  return { url: `/uploads/${safeSub}/${filename}?v=${stamp}` };
 }

@@ -30,7 +30,7 @@ export default async function AdminPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 md:px-6">
-      <h1 className="font-display text-5xl text-[var(--accent)]">Admin</h1>
+      <h1 className="page-title">Admin</h1>
       <p className="mt-2 text-[var(--muted)]">
         Gestion complète : équipes, matches, joueurs et candidatures.
       </p>
@@ -44,13 +44,13 @@ export default async function AdminPage() {
         ].map((c) => (
           <Link key={c.href} href={c.href} className="panel p-4 hover:border-[var(--accent)]">
             <p className="text-xs uppercase tracking-wide text-[var(--muted)]">{c.label}</p>
-            <p className="font-display text-4xl text-[var(--accent)]">{c.value}</p>
+            <p className="stat-value text-3xl text-[var(--text)]">{c.value}</p>
           </Link>
         ))}
       </div>
 
       <section className="space-y-4">
-        <h2 className="font-display text-3xl">Demandes en attente</h2>
+        <h2 className="section-title">Demandes en attente</h2>
         {requests.length === 0 ? (
           <div className="panel p-5 text-[var(--muted)]">Aucune demande en attente.</div>
         ) : (
@@ -58,7 +58,7 @@ export default async function AdminPage() {
             <article key={r.id} className="panel p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="font-display text-2xl">{r.user.displayName}</p>
+                  <p className="section-title">{r.user.displayName}</p>
                   <p className="text-sm text-[var(--muted)]">
                     {r.user.email}
                     {r.user.battleTag ? ` · ${r.user.battleTag}` : ""}
@@ -84,7 +84,7 @@ export default async function AdminPage() {
       </section>
 
       <section className="mt-10">
-        <h2 className="font-display mb-4 text-3xl">Historique candidatures</h2>
+        <h2 className="section-title mb-4">Historique candidatures</h2>
         <ul className="space-y-2">
           {recent.map((r) => (
             <li

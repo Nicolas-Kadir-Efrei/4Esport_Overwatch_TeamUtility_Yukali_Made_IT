@@ -1,8 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
-import { setLineupPlayer, setLineupStatus } from "@/lib/actions/captain";
+import { setLineupPlayer } from "@/lib/actions/captain";
 import { Avatar } from "@/components/avatar";
+import { PlayerName } from "@/components/captain-crown";
+import { MatchRsvpButtons } from "@/components/match-rsvp";
 import { formatPlayerRole } from "@/lib/constants";
 
 type LineupMember = {
@@ -17,22 +19,18 @@ type LineupMember = {
   status: "PRESENT" | "ABSENT" | "PENDING" | null;
 };
 
-const STATUSES = [
-  { value: "PRESENT", label: "Présent", className: "avail-yes" },
-  { value: "PENDING", label: "Indécis", className: "avail-maybe" },
-  { value: "ABSENT", label: "Absent", className: "avail-no" },
-] as const;
-
 export function LineupBoard({
   matchId,
   members,
   isManager,
   currentUserId,
+  locked = false,
 }: {
   matchId: string;
   members: LineupMember[];
   isManager: boolean;
   currentUserId: string;
+  locked?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -42,7 +40,7 @@ export function LineupBoard({
   ).length;
 
   function togglePlaying(member: LineupMember) {
-    if (!isManager) return;
+    if (!isManager || locked) return;
     const nextPlaying = !member.playing;
     const fd = new FormData();
     fd.set("matchId", matchId);
@@ -51,35 +49,6 @@ export function LineupBoard({
     fd.set("status", member.status ?? "PENDING");
     startTransition(() => {
       void setLineupPlayer(fd);
-    });
-  }
-
-  function setStatus(member: LineupMember, status: string) {
-    const canEdit =
-      isManager || member.userId === currentUserId;
-    if (!canEdit) return;
-
-    // Joueur : doit déjà être en lineup
-    if (!isManager && !member.playing) return;
-
-    if (isManager) {
-      const fd = new FormData();
-      fd.set("matchId", matchId);
-      fd.set("userId", member.userId);
-      fd.set("playing", "1");
-      fd.set("status", status);
-      startTransition(() => {
-        void setLineupPlayer(fd);
-      });
-      return;
-    }
-
-    const fd = new FormData();
-    fd.set("matchId", matchId);
-    fd.set("userId", member.userId);
-    fd.set("status", status);
-    startTransition(() => {
-      void setLineupStatus(fd);
     });
   }
 
@@ -92,11 +61,12 @@ export function LineupBoard({
         <span className="chip avail-yes">{presentCount} présents</span>
         {isManager ? (
           <span className="text-[var(--muted)]">
-            Coche « Joue », puis choisis Présent / Indécis / Absent.
+            Coche « Joue » pour la lineup. Chaque joueur peut aussi poser son
+            statut.
           </span>
         ) : (
           <span className="text-[var(--muted)]">
-            Si tu es dans la lineup, mets ton statut ci-dessous.
+            Change ton statut : Présent, Absent ou Indécis.
           </span>
         )}
       </div>
@@ -104,16 +74,13 @@ export function LineupBoard({
       <ul className="space-y-2">
         {members.map((m) => {
           const isSelf = m.userId === currentUserId;
-          const canSetStatus = isManager || (isSelf && m.playing);
-          const activeStatus = m.playing ? m.status ?? "PENDING" : null;
+          const canSetStatus = !locked && (isManager || isSelf);
 
           return (
             <li
               key={m.userId}
-              className={`panel px-4 py-3 transition ${
-                m.playing
-                  ? "border-[var(--line-strong)]"
-                  : "opacity-75"
+              className={`panel px-4 py-3 ${
+                m.playing || isSelf ? "border-[var(--line-strong)]" : ""
               }`}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -124,6 +91,7 @@ export function LineupBoard({
                         type="checkbox"
                         className="h-5 w-5 accent-[var(--accent)]"
                         checked={m.playing}
+                        disabled={locked}
                         onChange={() => togglePlaying(m)}
                         aria-label={`${m.displayName} joue`}
                       />
@@ -133,19 +101,29 @@ export function LineupBoard({
                     </label>
                   ) : (
                     <span
-                      className={`chip text-[10px] ${
-                        m.playing ? "avail-yes" : "avail-no"
+                      className={`chip ${
+                        m.status === "PRESENT"
+                          ? "avail-yes"
+                          : m.status === "ABSENT"
+                            ? "avail-no"
+                            : "avail-maybe"
                       }`}
                     >
-                      {m.playing ? "Lineup" : "Banc"}
+                      {m.status === "PRESENT"
+                        ? "Présent"
+                        : m.status === "ABSENT"
+                          ? "Absent"
+                          : "Indécis"}
                     </span>
                   )}
 
                   <Avatar src={m.avatarUrl} name={m.displayName} size="sm" />
                   <div className="min-w-0">
                     <p className="truncate font-semibold">
-                      {m.displayName}
-                      {m.teamRole === "CAPTAIN" ? " ★" : ""}
+                      <PlayerName
+                        name={m.displayName}
+                        captain={m.teamRole === "CAPTAIN"}
+                      />
                       {isSelf ? " (toi)" : ""}
                     </p>
                     <p className="truncate text-xs text-[var(--muted)]">
@@ -153,33 +131,20 @@ export function LineupBoard({
                       {m.discord ? ` · ${m.discord}` : ""}
                     </p>
                     {m.playerRoles.length > 0 && (
-                      <p className="truncate text-[11px] text-[var(--cyan)]">
+                      <p className="truncate text-xs text-[var(--muted)]">
                         {m.playerRoles.map(formatPlayerRole).join(" · ")}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 sm:justify-end">
-                  {STATUSES.map((s) => {
-                    const selected = activeStatus === s.value;
-                    const disabled = !canSetStatus;
-                    return (
-                      <button
-                        key={s.value}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => setStatus(m, s.value)}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
-                          selected
-                            ? s.className
-                            : "border-[var(--line)] bg-transparent text-[var(--muted)]"
-                        } ${disabled ? "cursor-not-allowed opacity-40" : "hover:border-[var(--line-strong)]"}`}
-                      >
-                        {s.label}
-                      </button>
-                    );
-                  })}
+                <div className="w-full sm:w-auto">
+                  <MatchRsvpButtons
+                    matchId={matchId}
+                    userId={m.userId}
+                    status={m.status}
+                    disabled={!canSetStatus}
+                  />
                 </div>
               </div>
             </li>

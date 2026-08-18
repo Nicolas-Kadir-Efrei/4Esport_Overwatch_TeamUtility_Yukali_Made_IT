@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { isUploadBlob, saveUploadedImage } from "@/lib/uploads";
 import { passwordSchema } from "@/lib/security/safe";
+import { seedMatchLineup } from "@/lib/lineup";
 
 export type AdminActionState = {
   error?: string;
@@ -178,6 +179,8 @@ export async function adminCreateMatch(
     },
   });
 
+  await seedMatchLineup(match.id, parsed.data.teamId);
+
   const oppLogo = formData.get("opponentLogo");
   if (isUploadBlob(oppLogo)) {
     const saved = await saveUploadedImage(oppLogo, "opponents", match.id);
@@ -270,14 +273,10 @@ export async function adminUpdateUser(
   const battleTag = String(formData.get("battleTag") ?? "").trim();
   const role = String(formData.get("role") ?? "PLAYER");
   const teamId = String(formData.get("teamId") ?? "");
-  const teamRole = String(formData.get("teamRole") ?? "PLAYER");
   const password = String(formData.get("password") ?? "");
 
   if (displayName.length < 2) return { error: "Pseudo trop court." };
   if (!["ADMIN", "PLAYER"].includes(role)) return { error: "Rôle invalide." };
-  if (!["CAPTAIN", "PLAYER"].includes(teamRole)) {
-    return { error: "Rôle d'équipe invalide." };
-  }
   if (id === admin.id && role !== "ADMIN") {
     return { error: "Tu ne peux pas te retirer le rôle admin." };
   }
@@ -317,7 +316,7 @@ export async function adminUpdateUser(
         where: { userId: id },
         data: {
           teamId,
-          role: teamRole as "CAPTAIN" | "PLAYER",
+          role: existing.teamId === teamId ? existing.role : "PLAYER",
         },
       });
     } else {
@@ -325,7 +324,7 @@ export async function adminUpdateUser(
         data: {
           userId: id,
           teamId,
-          role: teamRole as "CAPTAIN" | "PLAYER",
+          role: "PLAYER",
         },
       });
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   saveAvailability,
   updateProfile,
@@ -291,6 +292,7 @@ export function AvatarForm({
   avatarUrl?: string | null;
   displayName: string;
 }) {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
@@ -303,16 +305,17 @@ export function AvatarForm({
     };
   }, [preview]);
 
+  useEffect(() => {
+    if (state.success) router.refresh();
+  }, [state.success, router]);
+
   function pickFile(file: File | undefined) {
     if (!file) return;
-    if (preview) URL.revokeObjectURL(preview);
-    setPreview(URL.createObjectURL(file));
+    setPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
     setFileName(file.name);
-    if (inputRef.current) {
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      inputRef.current.files = dt.files;
-    }
   }
 
   return (
@@ -325,40 +328,37 @@ export function AvatarForm({
         />
         <div className="flex-1 space-y-3">
           <label
-            className="dropzone"
+            className="dropzone relative overflow-hidden"
             data-active={dragOver ? "true" : "false"}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              pickFile(e.dataTransfer.files?.[0]);
-            }}
           >
             <input
               ref={inputRef}
-              className="sr-only"
+              className="absolute inset-0 z-10 cursor-pointer opacity-0"
               id="avatar"
               name="avatar"
               type="file"
               accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,.gif,.png,.jpg,.jpeg,.webp"
               required
-              onChange={(e) => pickFile(e.target.files?.[0])}
+              onDragEnter={() => setDragOver(true)}
+              onDragLeave={() => setDragOver(false)}
+              onChange={(e) => {
+                setDragOver(false);
+                pickFile(e.target.files?.[0]);
+              }}
             />
-            <p className="font-display text-xl text-[var(--accent)]">
-              Dépose ton image ici
-            </p>
-            <p className="text-sm text-[var(--muted)]">
-              PNG, JPG, WebP ou GIF · max 5 Mo
-            </p>
-            {fileName ? (
-              <p className="chip avail-maybe">{fileName}</p>
-            ) : (
-              <span className="btn btn-ghost text-xs">Choisir un fichier</span>
-            )}
+            <div className="pointer-events-none grid place-items-center gap-3">
+              <p className="section-title">
+                Dépose ton image ici
+              </p>
+              <p className="text-sm text-[var(--muted)]">
+                PNG, JPG, WebP ou GIF · max 5 Mo
+              </p>
+              {fileName ? (
+                <p className="chip avail-maybe">{fileName}</p>
+              ) : (
+                <span className="btn btn-ghost text-xs">Choisir un fichier</span>
+              )}
+            </div>
           </label>
           <p className="field-hint">
             Les GIF animés sont supportés. La nouvelle photo remplace
@@ -367,7 +367,7 @@ export function AvatarForm({
         </div>
       </div>
       <Feedback state={state} />
-      <button className="btn btn-primary" disabled={pending} type="submit">
+      <button className="btn btn-primary" disabled={pending || !fileName} type="submit">
         {pending ? "Upload en cours..." : "Mettre à jour la PFP"}
       </button>
     </form>

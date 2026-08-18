@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { unstable_update } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
 import {
   PLAYER_ROLES,
@@ -145,7 +146,7 @@ export async function uploadAvatar(
   const user = await requireUser();
   const h = await headers();
   const ip = clientIpFromHeaders(h);
-  const limited = rateLimit(`upload:avatar:${user.id}:${ip}`, 10, 60 * 60 * 1000);
+  const limited = rateLimit(`upload:avatar:${user.id}:${ip}`, 30, 15 * 60 * 1000);
   if (!limited.ok) {
     return { error: `Trop d’uploads. Réessaie dans ${limited.retryAfterSec}s.` };
   }
@@ -155,13 +156,20 @@ export async function uploadAvatar(
     return { error: "Choisis une image (PNG, JPG, WebP ou GIF)." };
   }
 
-  const saved = await saveUploadedImage(raw, "avatars", user.id);
-  if ("error" in saved) return { error: saved.error };
+  try {
+    const saved = await saveUploadedImage(raw, "avatars", user.id);
+    if ("error" in saved) return { error: saved.error };
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { avatarUrl: saved.url },
-  });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { avatarUrl: saved.url },
+    });
+
+    await unstable_update({ user: { avatarUrl: saved.url } });
+  } catch (e) {
+    console.error("uploadAvatar", e);
+    return { error: "Échec de l’upload. Réessaie avec un PNG, JPG, WebP ou GIF plus léger." };
+  }
 
   revalidatePath("/", "layout");
   revalidatePath("/profile");

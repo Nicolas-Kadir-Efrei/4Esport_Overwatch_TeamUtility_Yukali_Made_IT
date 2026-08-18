@@ -70,10 +70,11 @@ model User {
   availabilities   Availability[]
   joinRequests     JoinRequest[]  @relation("Applicant")
   reviewedRequests JoinRequest[]  @relation("Reviewer")
-  createdMatches   Match[]        @relation("MatchCreator")
-  links            UserLink[]
-  createdTeamLinks TeamLink[]     @relation("TeamLinkCreator")
-  lineupEntries    MatchLineup[]
+  createdMatches    Match[]      @relation("MatchCreator")
+  links             UserLink[]
+  createdTeamLinks  TeamLink[]   @relation("TeamLinkCreator")
+  createdMatchLinks MatchLink[]  @relation("MatchLinkCreator")
+  lineupEntries     MatchLineup[]
 }
 
 model UserLink {
@@ -173,6 +174,7 @@ model Match {
   score           String?
   scheduledAt     DateTime
   notes           String?
+  contactBattleTags String[]  @default([])
   createdById     String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -180,10 +182,26 @@ model Match {
   team      Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
   createdBy User?         @relation("MatchCreator", fields: [createdById], references: [id], onDelete: SetNull)
   lineup    MatchLineup[]
+  links     MatchLink[]
 
   @@index([teamId, scheduledAt])
   @@index([scheduledAt])
   @@index([result])
+}
+
+model MatchLink {
+  id          String   @id @default(cuid())
+  matchId     String
+  title       String
+  url         String
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  match     Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("MatchLinkCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([matchId])
 }
 
 model MatchLineup {

@@ -347,20 +347,6 @@ export function AdminUserForm({
         </select>
       </div>
       <div>
-        <label className="label" htmlFor={`tr-${user.id}`}>
-          Rôle équipe
-        </label>
-        <select
-          className="input"
-          id={`tr-${user.id}`}
-          name="teamRole"
-          defaultValue={user.membership?.role ?? "PLAYER"}
-        >
-          <option value="PLAYER">Joueur</option>
-          <option value="CAPTAIN">Capitaine</option>
-        </select>
-      </div>
-      <div>
         <label className="label" htmlFor={`pw-${user.id}`}>
           Nouveau mot de passe
         </label>

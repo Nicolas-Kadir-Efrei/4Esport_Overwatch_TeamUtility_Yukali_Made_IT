@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AdminTeamForm } from "@/components/admin-forms";
 import { AdminNav } from "@/components/admin-nav";
+import { SetCaptainForm } from "@/components/captain-forms";
 import { TeamLogo } from "@/components/team-logo";
 import { adminDeleteTeam } from "@/lib/actions/admin";
 import { prisma } from "@/lib/prisma";
@@ -10,17 +11,23 @@ export default async function AdminTeamsPage() {
   await requireAdmin();
   const teams = await prisma.team.findMany({
     orderBy: { name: "asc" },
-    include: { _count: { select: { members: true, matches: true } } },
+    include: {
+      _count: { select: { members: true, matches: true } },
+      members: {
+        include: { user: { select: { displayName: true } } },
+        orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
+      },
+    },
   });
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 md:px-6">
-      <h1 className="font-display text-5xl text-[var(--accent)]">Équipes</h1>
+      <h1 className="page-title">Équipes</h1>
       <p className="mt-2 text-[var(--muted)]">Créer, modifier ou supprimer une équipe.</p>
       <AdminNav current="/admin/teams" />
 
       <section className="panel mb-8 p-5">
-        <h2 className="font-display mb-4 text-2xl">Nouvelle équipe</h2>
+        <h2 className="section-title mb-4">Nouvelle équipe</h2>
         <AdminTeamForm />
       </section>
 
@@ -41,7 +48,7 @@ export default async function AdminTeamsPage() {
                 <div>
                   <Link
                     href={`/teams/${team.id}`}
-                    className="font-display text-3xl hover:text-[var(--accent)]"
+                    className="match-heading hover:text-[var(--accent)]"
                   >
                     [{team.tag}] {team.name}
                   </Link>
@@ -58,6 +65,16 @@ export default async function AdminTeamsPage() {
                 </form>
               </div>
               <AdminTeamForm team={team} />
+              <div className="mt-5 border-t border-[var(--line)] pt-4">
+                <SetCaptainForm
+                  teamId={team.id}
+                  members={team.members.map((m) => ({
+                    userId: m.userId,
+                    displayName: m.user.displayName,
+                    role: m.role,
+                  }))}
+                />
+              </div>
             </div>
           </article>
         ))}

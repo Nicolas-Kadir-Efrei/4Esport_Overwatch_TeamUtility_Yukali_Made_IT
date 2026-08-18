@@ -3,14 +3,20 @@
 import { useActionState } from "react";
 import {
   createTeamLink,
+  createMatchLink,
   updateMatchScore,
+  updateMatchDetails,
+  updateMatchContactTags,
+  setTeamCaptain,
   kickTeamMember,
   deleteTeamLink,
+  deleteMatchLink,
   uploadTeamLogo,
   uploadOpponentLogo,
   type CaptainActionState,
 } from "@/lib/actions/captain";
 import { TeamLogo } from "@/components/team-logo";
+import { toDatetimeLocalValue } from "@/lib/constants";
 
 const initial: CaptainActionState = {};
 
@@ -66,6 +72,158 @@ export function MatchScoreForm({
       <div className="sm:col-span-3">
         <Feedback state={state} />
       </div>
+    </form>
+  );
+}
+
+export function MatchEditForm({
+  match,
+}: {
+  match: {
+    id: string;
+    opponent: string;
+    title: string | null;
+    type: string;
+    scheduledAt: Date;
+    notes: string | null;
+  };
+}) {
+  const [state, action, pending] = useActionState(updateMatchDetails, initial);
+
+  return (
+    <form action={action} className="grid gap-3 md:grid-cols-2">
+      <input type="hidden" name="matchId" value={match.id} />
+      <div>
+        <label className="label" htmlFor="edit-type">
+          Type
+        </label>
+        <select
+          className="input"
+          id="edit-type"
+          name="type"
+          defaultValue={match.type}
+        >
+          <option value="SCRIM">Scrim</option>
+          <option value="TOURNAMENT">Tournoi</option>
+          <option value="RANKED">Ranked</option>
+          <option value="OTHER">Autre</option>
+        </select>
+      </div>
+      <div>
+        <label className="label" htmlFor="edit-when">
+          Date & heure
+        </label>
+        <input
+          className="input"
+          id="edit-when"
+          name="scheduledAt"
+          type="datetime-local"
+          defaultValue={toDatetimeLocalValue(new Date(match.scheduledAt))}
+          required
+        />
+      </div>
+      <div>
+        <label className="label" htmlFor="edit-opp">
+          Adversaire
+        </label>
+        <input
+          className="input"
+          id="edit-opp"
+          name="opponent"
+          defaultValue={match.opponent}
+          required
+        />
+      </div>
+      <div>
+        <label className="label" htmlFor="edit-title">
+          Titre
+        </label>
+        <input
+          className="input"
+          id="edit-title"
+          name="title"
+          defaultValue={match.title ?? ""}
+        />
+      </div>
+      <div className="md:col-span-2">
+        <label className="label" htmlFor="edit-notes">
+          Notes
+        </label>
+        <input
+          className="input"
+          id="edit-notes"
+          name="notes"
+          defaultValue={match.notes ?? ""}
+        />
+      </div>
+      <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+        <button className="btn btn-primary text-sm" disabled={pending} type="submit">
+          {pending ? "…" : "Enregistrer le match"}
+        </button>
+        <Feedback state={state} />
+      </div>
+    </form>
+  );
+}
+
+export function MatchLinkForm({ matchId }: { matchId: string }) {
+  const [state, action, pending] = useActionState(createMatchLink, initial);
+
+  return (
+    <form action={action} className="grid gap-3 md:grid-cols-2">
+      <input type="hidden" name="matchId" value={matchId} />
+      <div>
+        <label className="label" htmlFor="match-link-title">
+          Titre
+        </label>
+        <input
+          className="input"
+          id="match-link-title"
+          name="title"
+          placeholder="VOD Twitch, replay…"
+          required
+        />
+      </div>
+      <div>
+        <label className="label" htmlFor="match-link-url">
+          URL
+        </label>
+        <input
+          className="input"
+          id="match-link-url"
+          name="url"
+          placeholder="https://www.twitch.tv/videos/…"
+          required
+        />
+      </div>
+      <div className="md:col-span-2">
+        <label className="label" htmlFor="match-link-desc">
+          Description
+        </label>
+        <input
+          className="input"
+          id="match-link-desc"
+          name="description"
+          placeholder="Map 1, POV Yukali, etc."
+        />
+      </div>
+      <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+        <button className="btn btn-primary text-sm" disabled={pending} type="submit">
+          {pending ? "…" : "Ajouter le lien"}
+        </button>
+        <Feedback state={state} />
+      </div>
+    </form>
+  );
+}
+
+export function DeleteMatchLinkButton({ linkId }: { linkId: string }) {
+  return (
+    <form action={deleteMatchLink}>
+      <input type="hidden" name="linkId" value={linkId} />
+      <button className="btn btn-danger px-2 py-1 text-[10px]" type="submit">
+        Suppr.
+      </button>
     </form>
   );
 }
@@ -229,6 +387,95 @@ export function KickMemberButton({
       <button className="btn btn-danger px-2 py-1 text-[10px]" type="submit">
         Virer
       </button>
+    </form>
+  );
+}
+
+export function SetCaptainForm({
+  teamId,
+  members,
+}: {
+  teamId: string;
+  members: { userId: string; displayName: string; role: string }[];
+}) {
+  const [state, action, pending] = useActionState(setTeamCaptain, initial);
+  const current = members.find((m) => m.role === "CAPTAIN")?.userId ?? "";
+
+  if (members.length === 0) {
+    return (
+      <p className="text-sm text-[var(--muted)]">
+        Ajoute des joueurs avant de nommer un capitaine.
+      </p>
+    );
+  }
+
+  return (
+    <form action={action} className="flex flex-wrap items-end gap-3">
+      <input type="hidden" name="teamId" value={teamId} />
+      <div className="min-w-[14rem] flex-1">
+        <label className="label" htmlFor={`captain-${teamId}`}>
+          Capitaine
+        </label>
+        <select
+          className="input"
+          id={`captain-${teamId}`}
+          name="userId"
+          defaultValue={current}
+          required
+        >
+          {members.map((m) => (
+            <option key={m.userId} value={m.userId}>
+              {m.displayName}
+              {m.role === "CAPTAIN" ? " (actuel)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button className="btn btn-primary text-sm" disabled={pending} type="submit">
+        {pending ? "…" : "Nommer capitaine"}
+      </button>
+      <Feedback state={state} />
+    </form>
+  );
+}
+
+export function MatchContactTagsForm({
+  matchId,
+  contactBattleTags,
+}: {
+  matchId: string;
+  contactBattleTags: string[];
+}) {
+  const [state, action, pending] = useActionState(
+    updateMatchContactTags,
+    initial,
+  );
+
+  return (
+    <form action={action} className="space-y-3">
+      <input type="hidden" name="matchId" value={matchId} />
+      <div>
+        <label className="label" htmlFor="contactBattleTags">
+          BattleTags à contacter
+        </label>
+        <textarea
+          className="input min-h-20"
+          id="contactBattleTags"
+          name="contactBattleTags"
+          defaultValue={contactBattleTags.join("\n")}
+          placeholder={"Yukali#1234\nCoach#5678"}
+        />
+        <p className="field-hint">
+          Un tag par ligne, ou séparés par des virgules. C’est le contact pour
+          ce match (pas le BattleTag perso du joueur).
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn btn-primary text-sm" disabled={pending} type="submit">
+          {pending ? "…" : "Enregistrer les contacts"}
+        </button>
+        <Feedback state={state} />
+      </div>
     </form>
   );
 }

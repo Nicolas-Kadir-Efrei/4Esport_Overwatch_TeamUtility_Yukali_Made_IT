@@ -1,5 +1,6 @@
 import { DAY_LABELS, DAY_SHORT } from "@/lib/constants";
 import { Avatar } from "@/components/avatar";
+import { PlayerName } from "@/components/captain-crown";
 import { formatPlayerRole, overlapsSlot } from "@/lib/constants";
 
 export type AvailabilitySlot = {
@@ -37,28 +38,30 @@ export function TeamAvailabilityOverview({
 
   return (
     <div className="overflow-x-auto panel">
-      <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <table className="avail-table">
         <thead>
-          <tr className="border-b border-[var(--line)] text-[var(--muted)]">
-            <th className="px-4 py-3 font-semibold">Joueur</th>
+          <tr>
+            <th>Joueur</th>
             {days.map((d) => (
-              <th key={d} className="px-2 py-3 text-center font-semibold">
-                {DAY_SHORT[d]}
-              </th>
+              <th key={d}>{DAY_SHORT[d]}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {members.map((m) => (
-            <tr key={m.id} className="border-b border-[var(--line)]/60">
-              <td className="px-4 py-3">
+            <tr key={m.id}>
+              <td>
                 <div className="flex items-center gap-2">
                   <Avatar src={m.avatarUrl} name={m.displayName} size="sm" />
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{m.displayName}</p>
+                    <p className="truncate font-semibold">
+                      <PlayerName
+                        name={m.displayName}
+                        captain={m.teamRole === "CAPTAIN"}
+                      />
+                    </p>
                     <p className="truncate text-xs text-[var(--muted)]">
-                      {m.teamRole === "CAPTAIN" ? "Capitaine" : "Joueur"}
-                      {m.battleTag ? ` · ${m.battleTag}` : ""}
+                      {m.battleTag ?? ""}
                     </p>
                   </div>
                 </div>
@@ -66,15 +69,15 @@ export function TeamAvailabilityOverview({
               {days.map((d) => {
                 const slots = m.availabilities.filter((s) => s.dayOfWeek === d);
                 return (
-                  <td key={d} className="px-2 py-2 align-top text-center">
+                  <td key={d} className="text-center">
                     {slots.length === 0 ? (
-                      <span className="text-xs text-[var(--muted)]">—</span>
+                      <span className="text-sm text-[var(--muted)]">—</span>
                     ) : (
                       <div className="flex flex-col items-center gap-1">
                         {slots.map((s) => (
                           <span
                             key={`${s.startTime}-${s.endTime}`}
-                            className="avail-yes px-1.5 py-0.5 text-[10px] leading-tight"
+                            className="avail-slot avail-yes"
                           >
                             {s.startTime}–{s.endTime}
                           </span>
@@ -131,17 +134,21 @@ export function MatchPlayerAvailabilityList({
             <li key={m.id} className="member-row !items-start">
               <Avatar src={m.avatarUrl} name={m.displayName} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{m.displayName}</p>
+                <p className="truncate text-sm font-semibold">
+                  <PlayerName
+                    name={m.displayName}
+                    captain={m.teamRole === "CAPTAIN"}
+                  />
+                </p>
                 <p className="truncate text-xs text-[var(--muted)]">
-                  {m.teamRole === "CAPTAIN" ? "Capitaine" : "Joueur"}
-                  {m.battleTag ? ` · ${m.battleTag}` : ""}
+                  {m.battleTag ?? ""}
                 </p>
                 {(m.playerRoles?.length ?? 0) > 0 && (
-                  <p className="truncate text-[11px] text-[var(--cyan)]">
+                  <p className="truncate text-xs text-[var(--muted)]">
                     {m.playerRoles!.map(formatPlayerRole).join(" · ")}
                   </p>
                 )}
-                <p className="mt-1 text-[11px] text-[var(--muted)]">
+                <p className="mt-1 text-xs text-[var(--muted)]">
                   {daySlots.length > 0
                     ? `Créneaux ${DAY_SHORT[dayOfWeek]} : ${daySlots
                         .map((s) => `${s.startTime}–${s.endTime}`)

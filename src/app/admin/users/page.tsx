@@ -1,5 +1,6 @@
 import { AdminUserForm } from "@/components/admin-forms";
 import { AdminNav } from "@/components/admin-nav";
+import { CaptainCrown } from "@/components/captain-crown";
 import { adminDeleteUser } from "@/lib/actions/admin";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
@@ -18,9 +19,9 @@ export default async function AdminUsersPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 md:px-6">
-      <h1 className="font-display text-5xl text-[var(--accent)]">Joueurs</h1>
+      <h1 className="page-title">Joueurs</h1>
       <p className="mt-2 text-[var(--muted)]">
-        Modifier rôles, équipe, mot de passe — ou supprimer un compte.
+        Modifier comptes, équipe, mot de passe — le capitaine se choisit dans Équipes.
       </p>
       <AdminNav current="/admin/users" />
 
@@ -31,18 +32,23 @@ export default async function AdminUsersPage() {
               <div className="flex items-center gap-3">
                 {user.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.avatarUrl} alt="" className="h-12 w-12 object-cover" />
+                  <img src={user.avatarUrl} alt="" className="avatar-frame h-12 w-12 object-cover" />
                 ) : (
-                  <span className="grid h-12 w-12 place-items-center bg-[var(--bg-elevated)]">
+                  <span className="grid h-12 w-12 place-items-center rounded-lg border border-[var(--line)] bg-[var(--bg-elevated)] font-semibold">
                     {user.displayName.slice(0, 1).toUpperCase()}
                   </span>
                 )}
                 <div>
-                  <p className="font-display text-2xl">{user.displayName}</p>
+                  <p className="section-title inline-flex items-center gap-1.5">
+                    {user.displayName}
+                    {user.membership?.role === "CAPTAIN" ? (
+                      <CaptainCrown className="h-4 w-4" />
+                    ) : null}
+                  </p>
                   <p className="text-sm text-[var(--muted)]">
                     {user.email}
                     {user.membership
-                      ? ` · [${user.membership.team.tag}] ${user.membership.role}`
+                      ? ` · [${user.membership.team.tag}]`
                       : " · sans équipe"}
                     {user.role === "ADMIN" ? " · ADMIN" : ""}
                   </p>

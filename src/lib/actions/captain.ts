@@ -5,6 +5,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireTeamManager, requireUser } from "@/lib/session";
 import { isUploadBlob, saveUploadedImage } from "@/lib/uploads";
+import { isLineupStatus } from "@/lib/lineup";
+import { sanitizeHttpUrl } from "@/lib/security/safe";
+import { unstable_update } from "@/lib/auth";
 
 export type CaptainActionState = {
   error?: string;
@@ -53,6 +56,78 @@ export async function kickTeamMember(formData: FormData) {
   revalidateTeamAndMatch(teamId);
 }
 
+/** Capitaine / admin : nommer un membre capitaine (un seul par équipe). */
+export async function setTeamCaptain(
+  _prev: CaptainActionState,
+  formData: FormData,
+): Promise<CaptainActionState> {
+  const teamId = String(formData.get("teamId") ?? "");
+  const userId = String(formData.get("userId") ?? "");
+  if (!teamId || !userId) return { error: "Équipe ou joueur manquant." };
+
+  const { user } = await requireTeamManager(teamId);
+  const target = await prisma.teamMember.findUnique({ where: { userId } });
+  if (!target || target.teamId !== teamId) {
+    return { error: "Ce joueur n’est pas dans l’équipe." };
+  }
+
+  await prisma.$transaction([
+    prisma.teamMember.updateMany({
+      where: { teamId, role: "CAPTAIN" },
+      data: { role: "PLAYER" },
+    }),
+    prisma.teamMember.update({
+      where: { userId },
+      data: { role: "CAPTAIN" },
+    }),
+  ]);
+
+  await unstable_update({
+    user: {
+      teamRole:
+        user.role === "ADMIN"
+          ? user.teamRole
+          : userId === user.id
+            ? "CAPTAIN"
+            : "PLAYER",
+    },
+  });
+
+  revalidatePath("/", "layout");
+  revalidateTeamAndMatch(teamId);
+  return { success: "Capitaine mis à jour." };
+}
+
+function parseBattleTags(raw: string): string[] {
+  return raw
+    .split(/[,;\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 3 && s.length <= 40)
+    .slice(0, 8);
+}
+
+/** Capitaine / admin : BattleTags à contacter pour le match. */
+export async function updateMatchContactTags(
+  _prev: CaptainActionState,
+  formData: FormData,
+): Promise<CaptainActionState> {
+  const matchId = String(formData.get("matchId") ?? "");
+  if (!matchId) return { error: "Match manquant." };
+
+  const match = await assertCaptainOrAdminForMatch(matchId);
+  if (!match) return { error: "Match introuvable." };
+
+  const tags = parseBattleTags(String(formData.get("contactBattleTags") ?? ""));
+
+  await prisma.match.update({
+    where: { id: matchId },
+    data: { contactBattleTags: tags },
+  });
+
+  revalidateTeamAndMatch(match.teamId, matchId);
+  return { success: "BattleTags de contact enregistrés." };
+}
+
 /** Capitaine / admin : score + résultat d'un match. */
 export async function updateMatchScore(
   _prev: CaptainActionState,
@@ -79,6 +154,111 @@ export async function updateMatchScore(
 
   revalidateTeamAndMatch(match.teamId, matchId);
   return { success: "Score / résultat enregistré." };
+}
+
+const matchEditSchema = z.object({
+  opponent: z.string().min(2).max(80).trim(),
+  title: z.string().max(80).trim().optional(),
+  type: z.enum(["SCRIM", "TOURNAMENT", "RANKED", "OTHER"]),
+  scheduledAt: z.string().min(1),
+  notes: z.string().max(500).trim().optional(),
+});
+
+/** Capitaine / admin : modifier un match de son équipe (pas le teamId). */
+export async function updateMatchDetails(
+  _prev: CaptainActionState,
+  formData: FormData,
+): Promise<CaptainActionState> {
+  const matchId = String(formData.get("matchId") ?? "");
+  if (!matchId) return { error: "Match manquant." };
+
+  const match = await assertCaptainOrAdminForMatch(matchId);
+  if (!match) return { error: "Match introuvable." };
+
+  const parsed = matchEditSchema.safeParse({
+    opponent: formData.get("opponent"),
+    title: formData.get("title") || undefined,
+    type: formData.get("type") || "SCRIM",
+    scheduledAt: formData.get("scheduledAt"),
+    notes: formData.get("notes") || undefined,
+  });
+  if (!parsed.success) return { error: "Formulaire match invalide." };
+
+  const when = new Date(parsed.data.scheduledAt);
+  if (Number.isNaN(when.getTime())) return { error: "Date / heure invalide." };
+
+  await prisma.match.update({
+    where: { id: matchId },
+    data: {
+      opponent: parsed.data.opponent,
+      title: parsed.data.title || null,
+      type: parsed.data.type,
+      scheduledAt: when,
+      notes: parsed.data.notes || null,
+    },
+  });
+
+  revalidateTeamAndMatch(match.teamId, matchId);
+  return { success: "Match mis à jour." };
+}
+
+const matchLinkSchema = z.object({
+  title: z.string().min(2).max(60).trim(),
+  url: z.string().url().max(500),
+  description: z.string().max(300).trim().optional(),
+});
+
+/** Capitaine / admin : VOD, Twitch, replay… liés au match. */
+export async function createMatchLink(
+  _prev: CaptainActionState,
+  formData: FormData,
+): Promise<CaptainActionState> {
+  const matchId = String(formData.get("matchId") ?? "");
+  if (!matchId) return { error: "Match manquant." };
+
+  const match = await assertCaptainOrAdminForMatch(matchId);
+  if (!match) return { error: "Match introuvable." };
+
+  const { user } = await requireTeamManager(match.teamId);
+  const url = sanitizeHttpUrl(String(formData.get("url") ?? ""));
+  if (!url) {
+    return { error: "URL invalide (https://… uniquement)." };
+  }
+
+  const parsed = matchLinkSchema.safeParse({
+    title: formData.get("title"),
+    url,
+    description: formData.get("description") || undefined,
+  });
+  if (!parsed.success) {
+    return { error: "Lien invalide (titre + URL https://…)." };
+  }
+
+  await prisma.matchLink.create({
+    data: {
+      matchId,
+      title: parsed.data.title,
+      url: parsed.data.url,
+      description: parsed.data.description || null,
+      createdById: user.id,
+    },
+  });
+
+  revalidateTeamAndMatch(match.teamId, matchId);
+  return { success: "Lien ajouté." };
+}
+
+export async function deleteMatchLink(formData: FormData) {
+  const linkId = String(formData.get("linkId") ?? "");
+  if (!linkId) return;
+  const link = await prisma.matchLink.findUnique({
+    where: { id: linkId },
+    include: { match: { select: { teamId: true, id: true } } },
+  });
+  if (!link) return;
+  await requireTeamManager(link.match.teamId);
+  await prisma.matchLink.delete({ where: { id: linkId } });
+  revalidateTeamAndMatch(link.match.teamId, link.match.id);
 }
 
 /** Capitaine / admin : logo de l'équipe. */
@@ -139,8 +319,6 @@ export async function uploadOpponentLogo(
   revalidateTeamAndMatch(match.teamId, matchId);
   return { success: "Logo adversaire mis à jour." };
 }
-
-import { sanitizeHttpUrl } from "@/lib/security/safe";
 
 const linkSchema = z.object({
   title: z.string().min(2).max(60).trim(),
@@ -203,10 +381,11 @@ export async function setLineupPlayer(formData: FormData) {
   const status = String(formData.get("status") ?? "PENDING");
 
   if (!matchId || !userId) return;
-  if (!["PRESENT", "ABSENT", "PENDING"].includes(status)) return;
+  if (!isLineupStatus(status)) return;
 
   const match = await assertCaptainOrAdminForMatch(matchId);
   if (!match) return;
+  if (match.result !== "SCHEDULED") return;
 
   const member = await prisma.teamMember.findUnique({ where: { userId } });
   if (!member || member.teamId !== match.teamId) return;
@@ -216,11 +395,11 @@ export async function setLineupPlayer(formData: FormData) {
   } else {
     await prisma.matchLineup.upsert({
       where: { matchId_userId: { matchId, userId } },
-      update: { status: status as "PRESENT" | "ABSENT" | "PENDING" },
+      update: { status },
       create: {
         matchId,
         userId,
-        status: status as "PRESENT" | "ABSENT" | "PENDING",
+        status: status,
       },
     });
   }
@@ -228,30 +407,39 @@ export async function setLineupPlayer(formData: FormData) {
   revalidateTeamAndMatch(match.teamId, matchId);
 }
 
-/** Joueur : son propre statut — ou capitaine pour n'importe quel joueur déjà en lineup. */
+/** Joueur de l'équipe : son propre statut. Capitaine/admin : n'importe quel membre. */
 export async function setLineupStatus(formData: FormData) {
   const sessionUser = await requireUser();
   const matchId = String(formData.get("matchId") ?? "");
   const targetUserId = String(formData.get("userId") ?? sessionUser.id);
   const status = String(formData.get("status") ?? "");
-  if (!matchId || !["PRESENT", "ABSENT", "PENDING"].includes(status)) return;
+  if (!matchId || !isLineupStatus(status)) return;
 
   const match = await prisma.match.findUnique({ where: { id: matchId } });
   if (!match) return;
+  if (match.result !== "SCHEDULED") return;
 
   const isSelf = targetUserId === sessionUser.id;
   if (!isSelf) {
     await requireTeamManager(match.teamId);
+  } else if (sessionUser.role !== "ADMIN") {
+    const membership = await prisma.teamMember.findUnique({
+      where: { userId: sessionUser.id },
+      select: { teamId: true },
+    });
+    if (!membership || membership.teamId !== match.teamId) return;
   }
 
-  const entry = await prisma.matchLineup.findUnique({
-    where: { matchId_userId: { matchId, userId: targetUserId } },
+  const targetMember = await prisma.teamMember.findUnique({
+    where: { userId: targetUserId },
+    select: { teamId: true },
   });
-  if (!entry) return;
+  if (!targetMember || targetMember.teamId !== match.teamId) return;
 
-  await prisma.matchLineup.update({
-    where: { id: entry.id },
-    data: { status: status as "PRESENT" | "ABSENT" | "PENDING" },
+  await prisma.matchLineup.upsert({
+    where: { matchId_userId: { matchId, userId: targetUserId } },
+    update: { status },
+    create: { matchId, userId: targetUserId, status },
   });
 
   revalidateTeamAndMatch(match.teamId, matchId);

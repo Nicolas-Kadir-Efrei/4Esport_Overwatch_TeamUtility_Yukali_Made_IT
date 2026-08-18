@@ -24,14 +24,14 @@ export default async function AdminMatchesPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 md:px-6">
-      <h1 className="font-display text-5xl text-[var(--accent)]">Matches</h1>
+      <h1 className="page-title">Matches</h1>
       <p className="mt-2 text-[var(--muted)]">
         CRUD complet + résultats pour l&apos;historique.
       </p>
       <AdminNav current="/admin/matches" />
 
       <section className="panel mb-8 p-5">
-        <h2 className="font-display mb-4 text-2xl">Nouveau match</h2>
+        <h2 className="section-title mb-4">Nouveau match</h2>
         <AdminMatchForm teams={teamOpts} />
       </section>
 
@@ -44,7 +44,7 @@ export default async function AdminMatchesPage() {
                 <div>
                   <Link
                     href={`/matches/${match.id}`}
-                    className="flex items-center gap-2 font-display text-2xl hover:text-[var(--accent)]"
+                    className="flex items-center gap-2 match-heading hover:text-[var(--accent)]"
                   >
                     <TeamLogo
                       src={match.opponentLogoUrl}
