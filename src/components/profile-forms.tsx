@@ -8,7 +8,7 @@ import {
   uploadAvatar,
   type ProfileActionState,
 } from "@/lib/actions/profile";
-import { DAY_LABELS, PLAYER_ROLES } from "@/lib/constants";
+import { DAY_LABELS, MAX_UPLOAD_BYTES, PLAYER_ROLES } from "@/lib/constants";
 import {
   SOCIAL_PLATFORMS,
   type SocialPlatformId,
@@ -296,6 +296,7 @@ export function AvatarForm({
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [fileError, setFileError] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
   const [state, action, pending] = useActionState(uploadAvatar, initial);
 
@@ -311,6 +312,19 @@ export function AvatarForm({
 
   function pickFile(file: File | undefined) {
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setFileError(
+        `Fichier trop lourd (${(file.size / 1024 / 1024).toFixed(1)} Mo, max 5 Mo).`,
+      );
+      setFileName("");
+      setPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+    setFileError("");
     setPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return URL.createObjectURL(file);
@@ -367,7 +381,12 @@ export function AvatarForm({
         </div>
       </div>
       <Feedback state={state} />
-      <button className="btn btn-primary" disabled={pending || !fileName} type="submit">
+      {fileError ? <p className="alert alert-error">{fileError}</p> : null}
+      <button
+        className="btn btn-primary"
+        disabled={pending || !fileName || Boolean(fileError)}
+        type="submit"
+      >
         {pending ? "Upload en cours..." : "Mettre à jour la PFP"}
       </button>
     </form>

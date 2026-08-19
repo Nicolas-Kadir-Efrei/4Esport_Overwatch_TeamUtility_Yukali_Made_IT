@@ -1,11 +1,13 @@
 import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
+import { put } from "@vercel/blob";
+import { MAX_UPLOAD_BYTES } from "@/lib/constants";
 import {
   sanitizeFileBasename,
   sanitizeUploadSubdir,
 } from "@/lib/security/safe";
 
-export const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 Mo — GIFs animés inclus
+export const MAX_LOGO_BYTES = MAX_UPLOAD_BYTES;
 
 export function isUploadBlob(
   value: FormDataEntryValue | null,
@@ -59,36 +61,54 @@ function sniffExt(bytes: Uint8Array): string | null {
   return null;
 }
 
+function contentTypeForExt(ext: string): string {
+  if (ext === "jpg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "application/octet-stream";
+}
+
 function isPathInside(parent: string, child: string): boolean {
   const rel = path.relative(path.resolve(parent), path.resolve(child));
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-/** Enregistre une image dans public/uploads/<subdir>/<basename>.ext */
-export async function saveUploadedImage(
-  file: File,
-  subdir: string,
-  basename: string,
-): Promise<{ url: string } | { error: string }> {
-  const safeSub = sanitizeUploadSubdir(subdir);
-  const safeBase = sanitizeFileBasename(basename);
-  if (!safeSub || !safeBase) {
-    return { error: "Identifiant fichier invalide." };
-  }
+function useBlobStorage(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
 
-  if (file.size > MAX_LOGO_BYTES) {
+async function saveToBlobStorage(
+  buffer: Buffer,
+  safeSub: string,
+  safeBase: string,
+  ext: string,
+): Promise<{ url: string } | { error: string }> {
+  const stamp = Date.now();
+  const pathname = `${safeSub}/${safeBase}.${ext}`;
+
+  try {
+    const blob = await put(pathname, buffer, {
+      access: "public",
+      contentType: contentTypeForExt(ext),
+      addRandomSuffix: false,
+    });
+    return { url: `${blob.url}?v=${stamp}` };
+  } catch (e) {
+    console.error("blob upload failed", e);
     return {
-      error: `Fichier trop lourd (${(file.size / 1024 / 1024).toFixed(1)} Mo, max 5 Mo).`,
+      error:
+        "Échec de l’upload cloud. Vérifie que le stockage Blob est activé sur Vercel (BLOB_READ_WRITE_TOKEN).",
     };
   }
+}
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  // On se fie uniquement aux magic bytes (pas au Content-Type navigateur)
-  const ext = sniffExt(buffer);
-  if (!ext) {
-    return { error: "Format non supporté. Utilise PNG, JPG, WebP ou GIF." };
-  }
-
+async function saveToLocalFilesystem(
+  buffer: Buffer,
+  safeSub: string,
+  safeBase: string,
+  ext: string,
+): Promise<{ url: string } | { error: string }> {
   const uploadsRoot = path.resolve(process.cwd(), "public", "uploads");
   const resolvedDir = path.resolve(uploadsRoot, safeSub);
   if (!isPathInside(uploadsRoot, resolvedDir)) {
@@ -134,10 +154,41 @@ export async function saveUploadedImage(
       console.error("upload write retry failed", retryErr);
       return {
         error:
-          "Écriture impossible. Sur Vercel le disque n’est pas persistant — utilise le mode local ou un stockage cloud.",
+          "Écriture impossible. Sur Vercel, active le stockage Blob (voir README / variables d’environnement).",
       };
     }
   }
 
   return { url: `/uploads/${safeSub}/${filename}?v=${stamp}` };
+}
+
+/** Enregistre une image (Blob Vercel en prod, public/uploads en local). */
+export async function saveUploadedImage(
+  file: File,
+  subdir: string,
+  basename: string,
+): Promise<{ url: string } | { error: string }> {
+  const safeSub = sanitizeUploadSubdir(subdir);
+  const safeBase = sanitizeFileBasename(basename);
+  if (!safeSub || !safeBase) {
+    return { error: "Identifiant fichier invalide." };
+  }
+
+  if (file.size > MAX_LOGO_BYTES) {
+    return {
+      error: `Fichier trop lourd (${(file.size / 1024 / 1024).toFixed(1)} Mo, max 5 Mo).`,
+    };
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const ext = sniffExt(buffer);
+  if (!ext) {
+    return { error: "Format non supporté. Utilise PNG, JPG, WebP ou GIF." };
+  }
+
+  if (useBlobStorage()) {
+    return saveToBlobStorage(buffer, safeSub, safeBase, ext);
+  }
+
+  return saveToLocalFilesystem(buffer, safeSub, safeBase, ext);
 }

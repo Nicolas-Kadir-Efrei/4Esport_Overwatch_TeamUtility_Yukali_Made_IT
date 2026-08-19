@@ -41,7 +41,8 @@ const serverActionOrigins = (() => {
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: "6mb",
+      // 5 Mo fichier + overhead multipart/form-data (~10–20 Ko, parfois plus)
+      bodySizeLimit: "10mb",
       allowedOrigins: serverActionOrigins,
     },
   },
@@ -51,6 +52,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "images.unsplash.com",
+      },
+      {
+        protocol: "https",
+        hostname: "*.public.blob.vercel-storage.com",
       },
     ],
   },

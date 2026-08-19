@@ -8,6 +8,9 @@ export const DAY_LABELS = [
   "Samedi",
 ] as const;
 
+/** Taille max des uploads image (avatars, logos) — côté client et serveur. */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
 export const DAY_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"] as const;
 
 export function formatMatchType(type: string) {
