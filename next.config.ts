@@ -16,7 +16,8 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self'",
+      // Upload PFP : le SDK Blob contacte vercel.com puis le store
+      "connect-src 'self' https://vercel.com https://*.vercel.com https://*.blob.vercel-storage.com https://*.public.blob.vercel-storage.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
