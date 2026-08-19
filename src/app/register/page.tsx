@@ -7,7 +7,7 @@ export default function RegisterPage() {
         <p className="eyebrow">Rejoins l&apos;org</p>
         <h1 className="font-display text-4xl text-[var(--accent)]">Inscription</h1>
         <p className="mb-6 mt-2 text-sm text-[var(--muted)]">
-          Crée ton compte, puis postule à une des équipes.
+          Crée ton compte 4Esport, puis postule à une des équipes.
         </p>
         <RegisterForm />
       </div>

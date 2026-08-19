@@ -11,11 +11,11 @@ function Brand({ href }: { href: string }) {
         className="grid h-10 w-10 place-items-center rounded-xl font-display text-sm text-[#120a02] shadow-[0_8px_24px_rgba(250,156,30,0.35)]"
         style={{ background: "linear-gradient(135deg,#fa9c1e,#ff6b2c)" }}
       >
-        OW
+        4E
       </span>
       <div className="leading-tight">
-        <p className="font-display text-xl tracking-wide">OW Roster</p>
-        <p className="text-[11px] text-[var(--muted)]">HQ Esport Overwatch</p>
+        <p className="font-display text-xl tracking-wide">4Esport</p>
+        <p className="text-[11px] text-[var(--muted)]">Overwatch</p>
       </div>
     </Link>
   );
@@ -24,19 +24,16 @@ function Brand({ href }: { href: string }) {
 function GuestNav() {
   return (
     <header className="nav-shell">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 md:px-6">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3.5 md:px-6">
         <Brand href="/" />
-        <nav className="hidden items-center gap-6 md:flex">
-          <Link className="nav-link" href="/#features">
-            Fonctions
+        <div className="flex shrink-0 items-center gap-2">
+          <Link href="/login" className="btn btn-ghost px-3 py-2 text-sm">
+            Se connecter
           </Link>
-          <Link className="nav-link" href="/login">
-            Connexion
+          <Link href="/register" className="btn btn-primary px-3 py-2 text-sm">
+            Créer mon compte
           </Link>
-        </nav>
-        <Link href="/register" className="btn btn-primary text-sm">
-          Créer un compte
-        </Link>
+        </div>
       </div>
     </header>
   );
@@ -69,14 +66,14 @@ export async function SiteNav() {
           <Link className="nav-link" href="/dashboard">
             Matches
           </Link>
-          <Link className="nav-link" href="/matches/history">
-            Historique
-          </Link>
           <Link className="nav-link" href="/teams">
             Équipes
           </Link>
           <Link className="nav-link" href="/profile">
             Profil
+          </Link>
+          <Link className="nav-link" href="/matches/history">
+            Historique
           </Link>
           {user.role === "ADMIN" && (
             <Link className="nav-link" href="/admin">
@@ -108,9 +105,9 @@ export async function SiteNav() {
       <div className="flex gap-1 overflow-x-auto border-t border-[var(--line)] px-3 py-2 md:hidden">
         {[
           ["/dashboard", "Matches"],
-          ["/matches/history", "Histo"],
           ["/teams", "Équipes"],
           ["/profile", "Profil"],
+          ["/matches/history", "Histo"],
           ...(user.role === "ADMIN" ? [["/admin", "Admin"] as const] : []),
         ].map(([href, label]) => (
           <Link

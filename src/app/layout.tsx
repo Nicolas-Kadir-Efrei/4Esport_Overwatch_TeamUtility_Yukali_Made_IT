@@ -19,9 +19,9 @@ const body = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "OW Roster — HQ Esport Overwatch",
+  title: "4Esport — Overwatch",
   description:
-    "Centralise matches, disponibilités et équipes Overwatch pour ton org esport.",
+    "QG 4Esport : matches, lineup, roster et planning Overwatch.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

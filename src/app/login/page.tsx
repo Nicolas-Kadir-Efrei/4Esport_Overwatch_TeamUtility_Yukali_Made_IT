@@ -7,7 +7,7 @@ export default function LoginPage() {
         <p className="eyebrow">Bienvenue</p>
         <h1 className="font-display text-4xl text-[var(--accent)]">Connexion</h1>
         <p className="mb-6 mt-2 text-sm text-[var(--muted)]">
-          Accède au HQ pour voir matches et disponibilités.
+          Accède au QG 4Esport pour voir matches et disponibilités.
         </p>
         <LoginForm />
       </div>
