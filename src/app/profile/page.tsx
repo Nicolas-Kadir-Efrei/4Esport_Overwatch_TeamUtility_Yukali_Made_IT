@@ -80,7 +80,11 @@ export default async function ProfilePage() {
         <p className="mb-4 text-sm text-[var(--muted)]">
           PNG, JPG, WebP ou GIF animé — jusqu’à 5 Mo.
         </p>
-        <AvatarForm avatarUrl={user.avatarUrl} displayName={user.displayName} />
+        <AvatarForm
+          userId={user.id}
+          avatarUrl={user.avatarUrl}
+          displayName={user.displayName}
+        />
       </section>
 
       <section className="panel fade-up p-5">

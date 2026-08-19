@@ -2,8 +2,10 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import {
   saveAvailability,
+  setAvatarUrl,
   updateProfile,
   uploadAvatar,
   type ProfileActionState,
@@ -286,9 +288,11 @@ export function ProfileForm({
 }
 
 export function AvatarForm({
+  userId,
   avatarUrl,
   displayName,
 }: {
+  userId: string;
   avatarUrl?: string | null;
   displayName: string;
 }) {
@@ -297,8 +301,17 @@ export function AvatarForm({
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [fileError, setFileError] = useState<string>("");
+  const [localError, setLocalError] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [state, action, pending] = useActionState(uploadAvatar, initial);
+  const [urlState, urlAction, urlPending] = useActionState(setAvatarUrl, initial);
+  const feedback = localError
+    ? { error: localError }
+    : urlState.error || urlState.success
+      ? urlState
+      : state;
+  const busy = uploading || pending || urlPending;
 
   useEffect(() => {
     return () => {
@@ -307,8 +320,50 @@ export function AvatarForm({
   }, [preview]);
 
   useEffect(() => {
-    if (state.success) router.refresh();
-  }, [state.success, router]);
+    if (state.success || urlState.success) router.refresh();
+  }, [state.success, urlState.success, router]);
+
+  async function submitAvatar(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLocalError("");
+
+    const file = inputRef.current?.files?.[0];
+    if (!file) {
+      setLocalError("Choisis une image.");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setFileError(
+        `Fichier trop lourd (${(file.size / 1024 / 1024).toFixed(1)} Mo, max 5 Mo).`,
+      );
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const blob = await upload(`avatars/${userId}`, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload/avatar",
+      });
+
+      const formData = new FormData();
+      formData.set("avatarUrl", `${blob.url}?v=${Date.now()}`);
+      urlAction(formData);
+    } catch (error) {
+      console.error("avatar client upload", error);
+      const message =
+        error instanceof Error ? error.message : "Upload impossible.";
+      if (/blob|token|credentials/i.test(message)) {
+        const fallback = new FormData();
+        fallback.set("avatar", file);
+        action(fallback);
+        return;
+      }
+      setLocalError(message);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   function pickFile(file: File | undefined) {
     if (!file) return;
@@ -333,7 +388,7 @@ export function AvatarForm({
   }
 
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={submitAvatar} className="space-y-4">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
         <Avatar
           src={preview ?? avatarUrl}
@@ -380,14 +435,14 @@ export function AvatarForm({
           </p>
         </div>
       </div>
-      <Feedback state={state} />
+      <Feedback state={feedback} />
       {fileError ? <p className="alert alert-error">{fileError}</p> : null}
       <button
         className="btn btn-primary"
-        disabled={pending || !fileName || Boolean(fileError)}
+        disabled={busy || !fileName || Boolean(fileError)}
         type="submit"
       >
-        {pending ? "Upload en cours..." : "Mettre à jour la PFP"}
+        {busy ? "Upload en cours..." : "Mettre à jour la PFP"}
       </button>
     </form>
   );

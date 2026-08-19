@@ -15,7 +15,7 @@ import {
   normalizeSocialPlatformId,
 } from "@/lib/social-platforms";
 import { isUploadBlob, saveUploadedImage } from "@/lib/uploads";
-import { sanitizeHttpUrl } from "@/lib/security/safe";
+import { isAllowedStoredImageUrl, sanitizeHttpUrl } from "@/lib/security/safe";
 import {
   clientIpFromHeaders,
   rateLimit,
@@ -170,6 +170,34 @@ export async function uploadAvatar(
     console.error("uploadAvatar", e);
     return { error: "Échec de l’upload. Réessaie avec un PNG, JPG, WebP ou GIF plus léger." };
   }
+
+  revalidatePath("/", "layout");
+  revalidatePath("/profile");
+  revalidatePath("/dashboard");
+  revalidatePath("/teams");
+  return { success: "Photo de profil mise à jour." };
+}
+
+export async function setAvatarUrl(
+  _prev: ProfileActionState,
+  formData: FormData,
+): Promise<ProfileActionState> {
+  const user = await requireUser();
+  const rawUrl = String(formData.get("avatarUrl") ?? "").trim();
+  const baseUrl = rawUrl.split("?")[0] ?? rawUrl;
+
+  if (!isAllowedStoredImageUrl(baseUrl, "avatars", user.id)) {
+    return { error: "URL d’avatar invalide." };
+  }
+
+  const avatarUrl = rawUrl.includes("?") ? rawUrl : `${rawUrl}?v=${Date.now()}`;
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { avatarUrl },
+  });
+
+  await unstable_update({ user: { avatarUrl } });
 
   revalidatePath("/", "layout");
   revalidatePath("/profile");

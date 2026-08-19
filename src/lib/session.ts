@@ -9,6 +9,12 @@ export async function requireUser() {
   return session.user;
 }
 
+export async function getSessionUser() {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  return session.user;
+}
+
 export async function requireAdmin() {
   const user = await requireUser();
   if (user.role !== "ADMIN") redirect("/dashboard");

@@ -31,6 +31,26 @@ export function sanitizeUploadSubdir(raw: string): string | null {
   return raw;
 }
 
+/** URL d’image autorisée après upload (local ou Vercel Blob). */
+export function isAllowedStoredImageUrl(
+  url: string,
+  subdir: "avatars" | "teams" | "opponents",
+  ownerId: string,
+): boolean {
+  const withoutQuery = url.split("?")[0] ?? url;
+  if (withoutQuery.startsWith(`/uploads/${subdir}/${ownerId}`)) return true;
+  try {
+    const parsed = new URL(withoutQuery);
+    if (!parsed.hostname.endsWith(".public.blob.vercel-storage.com")) {
+      return false;
+    }
+    return parsed.pathname === `/${subdir}/${ownerId}` ||
+      parsed.pathname.startsWith(`/${subdir}/${ownerId}.`);
+  } catch {
+    return false;
+  }
+}
+
 const DISCORD_HOSTS = new Set([
   "discord.com",
   "www.discord.com",
