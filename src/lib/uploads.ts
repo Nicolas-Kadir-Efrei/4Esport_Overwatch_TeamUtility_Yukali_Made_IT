@@ -74,9 +74,20 @@ function isPathInside(parent: string, child: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-function useBlobStorage(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+function isVercelRuntime(): boolean {
+  return process.env.VERCEL === "1";
 }
+
+function shouldUseBlobStorage(): boolean {
+  return (
+    Boolean(process.env.BLOB_READ_WRITE_TOKEN) ||
+    Boolean(process.env.BLOB_STORE_ID) ||
+    isVercelRuntime()
+  );
+}
+
+const BLOB_SETUP_HINT =
+  "Sur Vercel : Dashboard → Storage → Create Blob Store → Connect to Project, puis redéploie.";
 
 async function saveToBlobStorage(
   buffer: Buffer,
@@ -96,9 +107,14 @@ async function saveToBlobStorage(
     return { url: `${blob.url}?v=${stamp}` };
   } catch (e) {
     console.error("blob upload failed", e);
+    const detail =
+      e instanceof Error && e.message.includes("No blob credentials")
+        ? ` Stockage Blob non lié au projet. ${BLOB_SETUP_HINT}`
+        : isVercelRuntime()
+          ? ` ${BLOB_SETUP_HINT}`
+          : " Vérifie BLOB_READ_WRITE_TOKEN en local.";
     return {
-      error:
-        "Échec de l’upload cloud. Vérifie que le stockage Blob est activé sur Vercel (BLOB_READ_WRITE_TOKEN).",
+      error: `Échec de l’upload cloud.${detail}`,
     };
   }
 }
@@ -186,8 +202,14 @@ export async function saveUploadedImage(
     return { error: "Format non supporté. Utilise PNG, JPG, WebP ou GIF." };
   }
 
-  if (useBlobStorage()) {
+  if (shouldUseBlobStorage()) {
     return saveToBlobStorage(buffer, safeSub, safeBase, ext);
+  }
+
+  if (isVercelRuntime()) {
+    return {
+      error: `Upload impossible sans stockage Blob. ${BLOB_SETUP_HINT}`,
+    };
   }
 
   return saveToLocalFilesystem(buffer, safeSub, safeBase, ext);
